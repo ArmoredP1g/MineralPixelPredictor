@@ -1,5 +1,27 @@
+from turtle import forward
+from unittest import result
 import torch.nn as nn
 import torch
+from torch.nn.functional import pad
+from configs.training_cfg import device
+
+class multi_scale_smoothing(nn.Module):
+    def __init__(self, scale=8):
+        super().__init__()
+        self.scale = scale
+        self.front = 7
+    
+    def forward(self, x):
+        b, l = x.shape
+        front = self.scale-1
+        x = pad(x, (front,front), mode='replicate')
+        result = torch.zeros(b,l,self.scale).to(device)
+        for i in range(l):
+            for j in range(self.scale):
+                result[:,i,j] = torch.mean(x[:,i+front-j:i+front+j+1], dim=1)
+        return result
+
+        
 
 class lstm_single_variable(nn.Module):
     def __init__(self, norm=False):
@@ -38,7 +60,8 @@ class lstm_single_variable(nn.Module):
 class lstm_multi_variable(nn.Module):
     def __init__(self):
         super().__init__()
-        self.lstm = nn.LSTM(input_size=1, 
+        self.smooth = multi_scale_smoothing(8).to(device)
+        self.lstm = nn.LSTM(input_size=8, 
                             hidden_size=16, 
                             batch_first=True, 
                             num_layers=2,
@@ -63,5 +86,6 @@ class lstm_multi_variable(nn.Module):
                 nn.init.zeros_(param)
     
     def forward(self, x):
-        o, (h,c) = self.lstm(x.unsqueeze(2))
+        x = self.smooth(x)
+        o, (h,c) = self.lstm(x)
         return self.linear(torch.cat((h[-1,:,:], h[-2,:,:]), 1))
