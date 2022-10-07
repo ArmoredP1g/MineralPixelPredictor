@@ -17,4 +17,4 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_set, shuffle=True, batch_size=8, num_workers=0, drop_last=True)
     
     model = feature_analysis().to(device)
-    train(train_loader, test_loader, model, 5, lr=0.001, tag="多特征分析")
+    train(train_loader, test_loader, model, 5, lr=0.001, tag="操你大爷", vis=model.visualization)

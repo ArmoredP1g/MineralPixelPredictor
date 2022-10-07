@@ -4,7 +4,7 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.tensorboard import SummaryWriter
 from configs.training_cfg import device
 
-def train(train_loader, test_loader, model, epoch, lr=0.001, tag="unamed"):
+def train(train_loader, test_loader, model, epoch, lr=0.001, tag="unamed", vis=None):
     sum_writer = SummaryWriter("./runs/{}".format(tag))
     
     optimizer = Adam(model.parameters(),
@@ -38,6 +38,10 @@ def train(train_loader, test_loader, model, epoch, lr=0.001, tag="unamed"):
                                     )
                 loss_sum = 0
 
+            # 可视化内容
+            if total_step%10000 == 0:
+                if vis != None:
+                    vis(sum_writer, total_step)
 
             if total_step % 20000 == 0:
                 # 测试集测试准确率
