@@ -1,5 +1,5 @@
 from unicodedata import name
-from models.attention_series import feature_analysis
+from models.attention_series import feature_conbined
 from models.fc import fc_single_variable
 from dataloaders.dataloaders import dataset_xiongan
 from torch.utils.data import DataLoader
@@ -16,5 +16,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_set, shuffle=True, batch_size=8, num_workers=0, drop_last=True)
     test_loader = DataLoader(test_set, shuffle=True, batch_size=8, num_workers=0, drop_last=True)
     
-    model = feature_analysis().to(device)
-    train(train_loader, test_loader, model, 5, lr=0.001, tag="操你大爷", vis=model.visualization)
+    model = feature_conbined().to(device)
+    train(train_loader, test_loader, model, 5, lr=0.0001, tag="嗷2", vis=model.visualization)
+
+

@@ -16,7 +16,7 @@ class dataset_xiongan(Dataset):
     
     def __getitem__(self, index):
         x, y, label, name = self.df.loc[index]
-        return torch.Tensor(self.hdr[x,y]/6000)[0,0].to(device), label
+        return torch.Tensor(self.hdr[x,y]/10000)[0,0].to(device), label
 
     def __len__(self):
         return self.df.__len__()

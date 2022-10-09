@@ -7,6 +7,13 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 plt.rcParams['font.size'] = 9 
 
+def smooth(x, scale=9):
+    b, l = x.shape
+    x = pad(x, (scale,scale), mode='replicate')
+    result = torch.zeros(b,l).to(device)
+    for i in range(l):
+        result[:,i] = torch.mean(x[:,i:i+2*scale+1],dim=1)
+    return result
 
 def plt2arr(fig, draw=True):
     if draw:
@@ -48,43 +55,91 @@ class FeaturePicker(nn.Module):
 class feature_analysis(nn.Module):
     def __init__(self, norm=False):
         super().__init__()
-        self.fp_NDI = FeaturePicker(256,4,64,32).to(device)
-        self.fp_O23 = FeaturePicker(256,4,64,32).to(device)
-        self.fp_E = FeaturePicker(256,4,64,32).to(device)
-        self.fp_LN = FeaturePicker(256,4,64,32).to(device)
+        self.fp_DI = FeaturePicker(256,4,64,48).to(device)
+        self.fp_NDI = FeaturePicker(256,4,64,48).to(device)
+        self.fp_DI_DIFF = FeaturePicker(256,4,64,48).to(device)
+        self.fp_NDI_DIFF = FeaturePicker(256,4,64,48).to(device)
         self.weight = nn.Parameter(torch.randn(4))
-        self.fc = nn.Linear(32, 20)
+        self.fc1 = nn.Linear(48, 32)
+        self.fc2 = nn.Linear(32, 20)
+        self.elu = nn.ELU()
         
     
     def forward(self, x):
         shape = x.size()[0]
-        # RI = (x.unsqueeze(1)/(x.unsqueeze(2)+1e-5))
-        NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
-        O23 = (x.unsqueeze(1)**2 - x.unsqueeze(2)**3)
-        E = (torch.exp(x.unsqueeze(1))-torch.exp(x.unsqueeze(2)))
-        LN = (torch.log((x.unsqueeze(1)+1)/(x.unsqueeze(2)+1)))
+        diff = smooth(x.diff(prepend=x[:,0].unsqueeze(1)))
         
+        DI = x.unsqueeze(1)-x.unsqueeze(2)
+        NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
+        DI_DIFF = diff.unsqueeze(1)-diff.unsqueeze(2)
+        NDI_DIFF = (diff.unsqueeze(1)-diff.unsqueeze(2))/(diff.unsqueeze(1)+diff.unsqueeze(2)+1e-5)
+        
+        DI = self.fp_DI(DI).unsqueeze(1)
         NDI = self.fp_NDI(NDI).unsqueeze(1)
-        O23 = self.fp_O23(O23).unsqueeze(1)
-        E = self.fp_E(E).unsqueeze(1)
-        LN = self.fp_LN(LN).unsqueeze(1)
+        DI_DIFF = self.fp_DI_DIFF(DI_DIFF).unsqueeze(1)
+        NDI_DIFF = self.fp_NDI_DIFF(NDI_DIFF).unsqueeze(1)
 
-        emb = torch.cat((NDI,O23,E,LN), dim=1) * self.weight.repeat(shape,1).unsqueeze(2)
+        emb = torch.cat((DI,NDI,DI_DIFF,NDI_DIFF), dim=1) * self.weight.repeat(shape,1).unsqueeze(2)
         emb = emb.mean(dim=1)
         if torch.isnan(emb).any():
             print("")
-        return self.fc(emb)
+        
+        emb = self.elu(self.fc1(emb))
+        return self.fc2(emb)
 
     def visualization(self, sum_writer, scale):
         '''
         朝tensorboard输出可视化内容
         '''
         for i in range(64):
+            axexSub_DI = sns.heatmap(torch.abs(self.fp_DI.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
+            sum_writer.add_figure('heatmap_DI/channel{}'.format(i), axexSub_DI.figure, scale)# 得.figure转一下
             axexSub_NDI = sns.heatmap(torch.abs(self.fp_NDI.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
             sum_writer.add_figure('heatmap_NDI/channel{}'.format(i), axexSub_NDI.figure, scale)# 得.figure转一下
-            axexSub_O23 = sns.heatmap(torch.abs(self.fp_O23.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
-            sum_writer.add_figure('heatmap_O23/channel{}'.format(i), axexSub_O23.figure, scale)# 得.figure转一下
-            axexSub_E = sns.heatmap(torch.abs(self.fp_E.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
-            sum_writer.add_figure('heatmap_E/channel{}'.format(i), axexSub_E.figure, scale)# 得.figure转一下
-            axexSub_LN = sns.heatmap(torch.abs(self.fp_LN.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
-            sum_writer.add_figure('heatmap_LN/channel{}'.format(i), axexSub_LN.figure, scale)# 得.figure转一下
+            axexSub_DI_DIFF = sns.heatmap(torch.abs(self.fp_DI_DIFF.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
+            sum_writer.add_figure('heatmap_DI_DIFF/channel{}'.format(i), axexSub_DI_DIFF.figure, scale)# 得.figure转一下
+            axexSub_NDI_DIFF = sns.heatmap(torch.abs(self.fp_NDI_DIFF.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
+            sum_writer.add_figure('heatmap_NDI_DIFF/channel{}'.format(i), axexSub_NDI_DIFF.figure, scale)# 得.figure转一下
+
+
+class feature_conbined(nn.Module):
+    def __init__(self, norm=False):
+        super().__init__()
+        self.fp_DI = FeaturePicker(256,4,64,48).to(device)
+        self.fp_NDI = FeaturePicker(256,4,64,48).to(device)
+        self.fp_DI_DIFF = FeaturePicker(256,4,64,48).to(device)
+        self.fc1 = nn.Linear(48*3, 48)
+        self.fc2 = nn.Linear(48, 20)
+        self.elu = nn.ELU()
+        
+    
+    def forward(self, x):
+        diff = smooth(x,scale=2).diff(prepend=x[:,0].unsqueeze(1))
+        
+        DI = x.unsqueeze(1)-x.unsqueeze(2)
+        NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
+        DI_DIFF = diff.unsqueeze(1)-diff.unsqueeze(2)
+        
+        DI = self.fp_DI(DI)
+        NDI = self.fp_NDI(NDI)
+        DI_DIFF = self.fp_DI_DIFF(DI_DIFF)
+
+        emb = torch.cat((DI,NDI,DI_DIFF), dim=1)
+
+        if torch.isnan(emb).any():
+            print("")
+
+        emb = self.elu(self.fc1(emb))
+        return self.fc2(emb)
+
+    def visualization(self, sum_writer, scale):
+        '''
+        朝tensorboard输出可视化内容
+        '''
+        for i in range(64):
+            axexSub_DI = sns.heatmap(torch.abs(self.fp_DI.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
+            sum_writer.add_figure('heatmap_DI/channel{}'.format(i), axexSub_DI.figure, scale)# 得.figure转一下
+            axexSub_NDI = sns.heatmap(torch.abs(self.fp_NDI.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
+            sum_writer.add_figure('heatmap_NDI/channel{}'.format(i), axexSub_NDI.figure, scale)# 得.figure转一下
+            axexSub_DI_DIFF = sns.heatmap(torch.abs(self.fp_DI_DIFF.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
+            sum_writer.add_figure('heatmap_DI_DIFF/channel{}'.format(i), axexSub_DI_DIFF.figure, scale)# 得.figure转一下

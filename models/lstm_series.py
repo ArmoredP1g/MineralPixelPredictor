@@ -1,8 +1,10 @@
+from unittest import result
 import torch.nn as nn
 import torch
 from torch.nn.functional import pad
 from configs.training_cfg import device
 
+# 多尺度平滑
 class multi_scale_smoothing(nn.Module):
     def __init__(self, scale=8):
         super().__init__()
@@ -18,6 +20,8 @@ class multi_scale_smoothing(nn.Module):
             for j in range(self.scale):
                 result[:,i,j] = torch.mean(x[:,i+front-j:i+front+j+1], dim=1)
         return result
+
+
 
 class lstm_single_variable(nn.Module):
     def __init__(self, norm=False, diff=False):
