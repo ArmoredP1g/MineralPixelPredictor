@@ -4,7 +4,7 @@ from models.fc import fc_single_variable
 from dataloaders.dataloaders import dataset_xiongan
 from torch.utils.data import DataLoader
 from torch.utils.data  import random_split
-from trainer import train
+from trainer import train_classifier
 from configs.training_cfg import device
 import torch
 

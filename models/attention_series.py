@@ -143,3 +143,61 @@ class feature_conbined(nn.Module):
             sum_writer.add_figure('heatmap_NDI/channel{}'.format(i), axexSub_NDI.figure, scale)# 得.figure转一下
             axexSub_DI_DIFF = sns.heatmap(torch.abs(self.fp_DI_DIFF.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
             sum_writer.add_figure('heatmap_DI_DIFF/channel{}'.format(i), axexSub_DI_DIFF.figure, scale)# 得.figure转一下
+
+
+class feature_conbined_regression(nn.Module):
+    def __init__(self, pretrained=False, freeze=True):
+        super().__init__()
+        self.fp_DI = FeaturePicker(296,4,64,48).to(device)
+        self.fp_NDI = FeaturePicker(296,4,64,48).to(device)
+        self.fp_DI_DIFF = FeaturePicker(296,4,64,48).to(device)
+        self.fc1 = nn.Linear(48*3, 48)
+        # 加载预训练参数
+        if pretrained:
+            model_dict = self.state_dict()
+            pretrained_dict = torch.load(pretrained)
+            pretrained_dict = {k:v for k, v in pretrained_dict.items() if k in model_dict}
+            model_dict.update(pretrained_dict)
+            self.load_state_dict(model_dict)
+        # 冻结上边部分的参数
+        if freeze:
+            for p in self.parameters():
+                p.requires_grad = False
+
+        # 重新学习的参数
+        self.learnable_1 = nn.Linear(48, 20)
+        self.learnable_2 = nn.Linear(20, 1)
+        self.elu = nn.ELU()
+        
+    
+    def forward(self, x):
+        diff = x.diff(prepend=x[:,0].unsqueeze(1))#就别平滑了，
+        
+        DI = x.unsqueeze(1)-x.unsqueeze(2)
+        NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
+        DI_DIFF = diff.unsqueeze(1)-diff.unsqueeze(2)
+        
+        DI = self.fp_DI(DI)
+        NDI = self.fp_NDI(NDI)
+        DI_DIFF = self.fp_DI_DIFF(DI_DIFF)
+
+        emb = torch.cat((DI,NDI,DI_DIFF), dim=1)
+
+        if torch.isnan(emb).any():
+            print("")
+
+        emb = self.elu(self.fc1(emb))
+        emb = self.elu(self.learnable_1(emb))
+        return torch.sigmoid(self.learnable_2(emb))
+
+    def visualization(self, sum_writer, scale):
+        '''
+        朝tensorboard输出可视化内容
+        '''
+        for i in range(64):
+            axexSub_DI = sns.heatmap(torch.abs(self.fp_DI.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
+            sum_writer.add_figure('heatmap_DI/channel{}'.format(i), axexSub_DI.figure, scale)# 得.figure转一下
+            axexSub_NDI = sns.heatmap(torch.abs(self.fp_NDI.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
+            sum_writer.add_figure('heatmap_NDI/channel{}'.format(i), axexSub_NDI.figure, scale)# 得.figure转一下
+            axexSub_DI_DIFF = sns.heatmap(torch.abs(self.fp_DI_DIFF.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
+            sum_writer.add_figure('heatmap_DI_DIFF/channel{}'.format(i), axexSub_DI_DIFF.figure, scale)# 得.figure转一下
