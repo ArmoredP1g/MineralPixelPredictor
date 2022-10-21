@@ -1,4 +1,5 @@
 from torch.optim import Adam
+from torch.cuda.amp import autocast as autocast
 import torch
 from torch.nn import CrossEntropyLoss
 from torch.utils.tensorboard import SummaryWriter
@@ -21,8 +22,8 @@ def train_classifier(train_loader, test_loader, model, epoch, lr=0.001, tag="una
         for _, (data, label) in enumerate(train_loader, 0):
             total_step += 1
             label = torch.Tensor(label).to(device)
-            output = model(data.to(device))
             optimizer.zero_grad()
+            output = model(data.to(device))
             loss = loss_fn(output, label-1) #0是无效的
             loss.backward()
             optimizer.step()
@@ -63,7 +64,7 @@ def train_classifier(train_loader, test_loader, model, epoch, lr=0.001, tag="una
     torch.save(model.state_dict(), "./ckpt/{}_{}.pt".format(tag, total_step))
                                
 
-def train_regression(train_loader, test_loader, model, epoch, lr=0.001, tag="unamed", vis=None):
+def train_regression(train_loader, model, epoch, test_loader=False, lr=0.001, tag="unamed", vis=None):
     sum_writer = SummaryWriter("./runs/{}".format(tag))
     optimizer = Adam(model.parameters(),
                     lr=lr,
@@ -78,8 +79,8 @@ def train_regression(train_loader, test_loader, model, epoch, lr=0.001, tag="una
         for _, (data, gt) in enumerate(train_loader, 0):
             total_step += 1
             label = torch.Tensor(gt['gt_TFe']).to(device)
-            output = model(data.to(device).squeeze(0))
             optimizer.zero_grad()
+            output = model(data.to(device).squeeze(0))
             loss = (output.mean()-label).pow(2)
             loss.backward()
             optimizer.step()
@@ -96,23 +97,24 @@ def train_regression(train_loader, test_loader, model, epoch, lr=0.001, tag="una
                 loss_sum = 0
 
             # 可视化内容
-            if total_step%10000 == 0:
+            if total_step%5000 == 0:
                 if vis != None:
                     vis(sum_writer, total_step)
 
-            if total_step % 2000 == 0:
+            if total_step % 5000 == 0:
                 # 测试集测试均方误差
                 total_mse = 0
-                for  _, (data, label) in enumerate(test_loader, 0):
-                    label = torch.Tensor(label).to(device)
-                    output = model(data.to(device))
-                    total_mse += (output.mean()-label).pow(2)
+                if test_loader:
+                    for  _, (data, label) in enumerate(test_loader, 0):
+                        label = torch.Tensor(label['gt_TFe']).to(device)
+                        output = model(data.to(device).squeeze(0))
+                        total_mse += (output.mean()-label).pow(2)
 
-                avg_mse = total_mse/(test_loader.__len__()*8)
-                sum_writer.add_scalar(tag='平均MSE',
-                                scalar_value=avg_mse,
-                                global_step=total_step
-                            )
+                    avg_mse = total_mse/(test_loader.__len__()*8)
+                    sum_writer.add_scalar(tag='平均MSE',
+                                    scalar_value=avg_mse,
+                                    global_step=total_step
+                                )
                 torch.save(model.state_dict(), "./ckpt/{}_{}.pt".format(tag, total_step))
 
 
