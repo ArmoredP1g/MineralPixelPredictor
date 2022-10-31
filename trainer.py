@@ -70,7 +70,7 @@ def train_regression(train_loader, model, epoch, test_loader=False, lr=0.001, ta
                     lr=lr,
                     betas=(0.9, 0.999),
                     eps=1e-08,
-                    weight_decay=0.00001,
+                    weight_decay=0.0001,
                     amsgrad=False)
     
     total_step = 0

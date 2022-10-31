@@ -55,7 +55,7 @@ class dataset_iron(Dataset):
         id_list = self.df[self.df['sample_id']==self.sample_list[index]].sample(self.samplepoint).data_id.to_list()
         result = []
         for id in id_list:
-            result.append(torch.Tensor(self.hdf5[str(id)][:-2]).unsqueeze(0)) # 做数据集时犯了低级错误，需要再去掉两个元素
+            result.append(torch.Tensor(self.hdf5['data'][id]).unsqueeze(0)) # 做数据集时犯了低级错误，需要再去掉两个元素
         return torch.cat(result,dim=0), gt
 
     def __len__(self):

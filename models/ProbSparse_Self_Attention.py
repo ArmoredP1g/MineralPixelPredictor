@@ -1,0 +1,88 @@
+from re import M
+import torch.nn as nn
+import torch
+from math import sqrt, log, ceil
+
+
+
+class ProbSparse_Self_Attention_Block(nn.Module):
+    def __init__(self, **kwargs):
+        super().__init__()
+
+        # default_args
+        self.args = {
+            'input_dim': 16,
+            'qk_dim': 8,
+            'heads': 8,
+            'dim_feedforward': 24,
+            'sparse': False,
+            'sf_q': 5,   # sampling factor, sf_q*log(len) q_vecs will be selected.
+            'sf_k': 5,   # sampling factor for k
+        }
+
+        self.args.update(kwargs)
+        
+        self.WQ = nn.Linear(self.args['input_dim'], self.args['heads']*self.args['qk_dim'], bias=False)
+        self.WK = nn.Linear(self.args['input_dim'], self.args['heads']*self.args['qk_dim'], bias=False)
+        self.WV = nn.Linear(self.args['input_dim'], self.args['heads']*self.args['input_dim'], bias=False)
+        self.WZ = nn.Linear(self.args['heads']*self.args['input_dim'], self.args['input_dim'])
+        
+        self.MLP_1 = nn.Linear(self.args['input_dim'], self.args['dim_feedforward'])
+        self.MLP_2 = nn.Linear(self.args['dim_feedforward'], self.args['input_dim'])
+        self.layer_norm = nn.LayerNorm(self.args['input_dim'])
+        self.soft = nn.Softmax(dim=1)
+
+    def forward(self,x):    # input: [batch, len, dim]
+        b,l,d = x.shape
+        h = self.args['heads']
+        input = x
+        sample_q = ceil(self.args['sf_q']*log(l))
+        sample_k = ceil(self.args['sf_k']*log(l))
+        #todo position embedding
+        x = x.reshape(b*l,d)
+
+
+        # attn 
+        if self.args['sparse'] == False:    # classic self-attn
+            q = self.WQ(x).reshape(b,l,h,self.args['qk_dim']).permute(1,0,2,3).unsqueeze(1)   # [batch, len, heads, qkv_dim] -> [len, 1, batch, heads, qkv_dim]
+            k = self.WK(x).reshape(b,l,h,self.args['qk_dim']).permute(1,0,2,3)   # [batch, len, heads, qkv_dim] -> [len, batch, heads, qkv_dim]
+            v = self.WV(x).reshape(b,l,h,self.args['input_dim'])   # [batch, len, heads, input_dim]
+            qk = self.soft((q*k).sum(dim=4) / sqrt(self.args['qk_dim']))  # [len, len(softmax), batch, heads] 
+            z = torch.einsum('lsbh,lsbhd->blhd', qk, v.permute(1,0,2,3).unsqueeze(0).repeat(l,1,1,1,1)).reshape(b,l,h*d)   # [batch, len, heads*input_dim]
+            z = self.WZ(z.reshape(b*l,-1)).reshape(b,l,-1) + input  # residual
+            z = self.layer_norm(z)  # 对单个时间步处理
+        elif self.args['sparse'] == True:   # sparse self-attn
+            q = self.WQ(x).reshape(b,l,h,self.args['qk_dim']).permute(1,0,2,3).unsqueeze(1)   # [batch, len, heads, qkv_dim] -> [len, 1, batch, heads, qkv_dim]
+            k = self.WK(x).reshape(b,l,h,self.args['qk_dim']).permute(1,0,2,3)   # [batch, len, heads, qkv_dim] -> [len, batch, heads, qkv_dim]
+            v = self.WV(x).reshape(b,l,h,self.args['input_dim'])   # [batch, len, heads, input_dim]
+        
+            # randomly select sf_k*ln(len) keys to calculate M
+            random_keys = k.unsqueeze(1).repeat(1,l,1,1,1)[torch.arange(l).unsqueeze(1), torch.randint(l,(l,sample_k)),:,:,:] # [l,sample_k,b,h,d]
+
+            # calculate sparsity, pick top sample_q Qs
+            sparsity = torch.max((q*random_keys).sum(dim=4), dim=1)[0] - (q*random_keys).sum(dim=4).mean(dim=1)  # [len, batch, heads]
+            quiries_idx = sparsity.topk(sample_q,0)[1]  # [sample_q, batch, heads]
+            q = q.squeeze(1)[quiries_idx,torch.arange(b)[None,:,None],torch.arange(h)[None,None,:],:].unsqueeze(1)  # [len, 1, batch, heads, qkv_dim] -> [sample_q, 1, batch, heads, qkv_dim]
+
+            # calculate qk,z with selected Qs
+            qk = self.soft((q*k).sum(dim=4) / sqrt(self.args['qk_dim']))    # [sample_q, len(softmax), batch, heads]
+            z_activate = torch.einsum('slbh,slbhd->bshd', qk, v.permute(1,0,2,3).unsqueeze(0).repeat(sample_q,1,1,1,1)).reshape(b,sample_q,h,d)   # [batch, sample_q, heads, input_dim]
+
+            # unselected part replaced by mean(V)
+            z = v.mean(dim=1).unsqueeze(1).repeat(1,l,1,1)  # all assigned with mean(V) [batch, len, heads, input_dim]  # The inactive parts replaced by mean(V)
+            z[torch.arange(b)[:,None,None],quiries_idx.permute(1,0,2), torch.arange(h)[None,None,:],:] = z_activate    # replaced by the active part
+            z = self.WZ(z.reshape(b*l,-1)).reshape(b,l,-1) + input  # residual
+            z = self.layer_norm(z)  # 对单个时间步处理
+
+        # mlp
+        h = self.MLP_1(z.reshape(b*l,d))
+        output = self.MLP_2(h).reshape(b,l,-1)
+        output = self.layer_norm(output + z)    # residual
+        return output
+
+
+        
+
+
+
+

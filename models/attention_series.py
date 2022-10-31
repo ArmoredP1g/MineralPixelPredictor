@@ -56,8 +56,7 @@ class feature_conbined_regression(nn.Module):
         super().__init__()
         self.fp_DI = FeaturePicker(296,4,64,48).to(device)
         self.fp_NDI = FeaturePicker(296,4,64,48).to(device)
-        self.fp_DI_DIFF = FeaturePicker(296,4,64,48).to(device)
-        self.fc1 = nn.Linear(48*3, 48)
+        self.fc1 = nn.Linear(48*2, 48)
         # 加载预训练参数
         if pretrained:
             model_dict = self.state_dict()
@@ -77,17 +76,13 @@ class feature_conbined_regression(nn.Module):
         
     
     def forward(self, x):
-        diff = x.diff(prepend=x[:,0].unsqueeze(1))#就别平滑了，
-        
         DI = x.unsqueeze(1)-x.unsqueeze(2)
         NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
-        DI_DIFF = diff.unsqueeze(1)-diff.unsqueeze(2)
         
         DI = self.fp_DI(DI)
         NDI = self.fp_NDI(NDI)
-        DI_DIFF = self.fp_DI_DIFF(DI_DIFF)
 
-        emb = torch.cat((DI,NDI,DI_DIFF), dim=1)
+        emb = torch.cat((DI,NDI), dim=1)
 
         if torch.isnan(emb).any():
             print("")
@@ -105,5 +100,3 @@ class feature_conbined_regression(nn.Module):
             sum_writer.add_figure('heatmap_DI/channel{}'.format(i), axexSub_DI.figure, scale)# 得.figure转一下
             axexSub_NDI = sns.heatmap(torch.abs(self.fp_NDI.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
             sum_writer.add_figure('heatmap_NDI/channel{}'.format(i), axexSub_NDI.figure, scale)# 得.figure转一下
-            axexSub_DI_DIFF = sns.heatmap(torch.abs(self.fp_DI_DIFF.weight_map).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
-            sum_writer.add_figure('heatmap_DI_DIFF/channel{}'.format(i), axexSub_DI_DIFF.figure, scale)# 得.figure转一下
