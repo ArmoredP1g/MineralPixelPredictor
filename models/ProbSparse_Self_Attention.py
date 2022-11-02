@@ -1,9 +1,6 @@
-from re import M
 import torch.nn as nn
 import torch
 from math import sqrt, log, ceil
-
-
 
 class ProbSparse_Self_Attention_Block(nn.Module):
     def __init__(self, **kwargs):
@@ -21,6 +18,7 @@ class ProbSparse_Self_Attention_Block(nn.Module):
         }
 
         self.args.update(kwargs)
+
         
         self.WQ = nn.Linear(self.args['input_dim'], self.args['heads']*self.args['qk_dim'], bias=False)
         self.WK = nn.Linear(self.args['input_dim'], self.args['heads']*self.args['qk_dim'], bias=False)
@@ -31,14 +29,26 @@ class ProbSparse_Self_Attention_Block(nn.Module):
         self.MLP_2 = nn.Linear(self.args['dim_feedforward'], self.args['input_dim'])
         self.layer_norm = nn.LayerNorm(self.args['input_dim'])
         self.soft = nn.Softmax(dim=1)
+        self.elu = nn.ELU()
 
-    def forward(self,x):    # input: [batch, len, dim]
-        b,l,d = x.shape
+    def forward(self,x):    # input: [batch, len, dim] / [batch, len, dim]
+        shape = x.shape
+        reshape_flag = False
+        b,l,d,r,c = 0,0,0,0,0
+
+        if shape.__len__() == 3:  # 1d input
+            b,l,d = shape
+        elif shape.__len__() == 4:  # 2d input
+            reshape_flag = True
+            b,r,c,d = shape
+            l = r*c
+            x = x.reshape(b,l,d)
+            
+            
         h = self.args['heads']
         input = x
         sample_q = ceil(self.args['sf_q']*log(l))
         sample_k = ceil(self.args['sf_k']*log(l))
-        #todo position embedding
         x = x.reshape(b*l,d)
 
 
@@ -57,6 +67,7 @@ class ProbSparse_Self_Attention_Block(nn.Module):
             v = self.WV(x).reshape(b,l,h,self.args['input_dim'])   # [batch, len, heads, input_dim]
         
             # randomly select sf_k*ln(len) keys to calculate M
+            # random_keys = k.unsqueeze(1).repeat(1,l,1,1,1)[:, torch.randint(l,(sample_k,)),:,:,:] # [l,sample_k,b,h,d]
             random_keys = k.unsqueeze(1).repeat(1,l,1,1,1)[torch.arange(l).unsqueeze(1), torch.randint(l,(l,sample_k)),:,:,:] # [l,sample_k,b,h,d]
 
             # calculate sparsity, pick top sample_q Qs
@@ -75,14 +86,11 @@ class ProbSparse_Self_Attention_Block(nn.Module):
             z = self.layer_norm(z)  # 对单个时间步处理
 
         # mlp
-        h = self.MLP_1(z.reshape(b*l,d))
+        h = self.elu(self.MLP_1(z.reshape(b*l,d)))
         output = self.MLP_2(h).reshape(b,l,-1)
         output = self.layer_norm(output + z)    # residual
+
+        if reshape_flag:
+            output = output.reshape(b,r,c,-1)
         return output
-
-
-        
-
-
-
 

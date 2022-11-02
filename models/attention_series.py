@@ -2,6 +2,9 @@ import torch.nn as nn
 import torch
 from torch.nn.functional import pad
 import numpy as np
+from models.SoftPool import SoftPool_1d
+from models.ProbSparse_Self_Attention import ProbSparse_Self_Attention_Block
+from models.PositionEmbedding import positionalencoding1d
 from configs.training_cfg import device
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -22,6 +25,50 @@ def plt2arr(fig, draw=True):
     (w,h) = fig.canvas.get_width_height()
     rgba_arr = np.frombuffer(rgba_buf, dtype=np.uint8).reshape((h,w,4))
     return rgba_arr
+
+class Infomer_Based(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.avgpool = nn.AvgPool1d(2,2)
+        self.pe = nn.Linear(4,8)
+        self.attn_1 = ProbSparse_Self_Attention_Block(input_dim=8,dim_feedforward=12,sparse=True)
+        self.soft_pool_1 = SoftPool_1d(2,8,12,2)
+        self.attn_2 = ProbSparse_Self_Attention_Block(input_dim=8,dim_feedforward=12,sparse=True)
+        self.soft_pool_2 = SoftPool_1d(2,8,12,2)
+        self.attn_3 = ProbSparse_Self_Attention_Block(input_dim=8,dim_feedforward=12,sparse=True)
+        self.dim_reduce = nn.Conv1d(8,4,1,1)
+        self.fc1 = nn.Linear(37*4,37*2)
+        self.fc2 = nn.Linear(37*2,37)
+        self.fc_out = nn.Linear(37,1)
+
+    def forward(self, input):
+        raw = input # [batch, len]
+        normed = input/(input.max()-input.min()+1e-6)
+        input = torch.cat([raw.unsqueeze(2), normed.unsqueeze(2)],dim=2)    # [batch, len(296), 2]
+        input = self.avgpool(input.transpose(1,2)).transpose(1,2)    # [batch, len(148), 2]
+        b,l,d = input.shape
+        input = torch.cat([input,positionalencoding1d(2,l).to(input.device).unsqueeze(0).repeat(b,1,1)],dim=2) # [batch, len(148), 4]
+        _,l,d = input.shape
+        input = self.pe(input.reshape(b*l,d)).reshape(b,l,-1)
+        _,_,d = input.shape # [batch, len(148), 8]
+
+        input = self.attn_1(input)
+        input = self.soft_pool_1(input)  # [batch, len(74), 8]
+        input = self.attn_2(input)
+        input = self.soft_pool_2(input)  # [batch, len(37), 8]
+        input = self.attn_3(input)
+
+        input = self.dim_reduce(input.transpose(1,2)).transpose(1,2)
+        _,l,d = input.shape
+        input = torch.relu(self.fc1(input.reshape(b,l*d)))
+        input = torch.relu(self.fc2(input))
+        return torch.sigmoid(self.fc_out(input))
+
+
+
+
+
+        
 
 class FeaturePicker(nn.Module):
     def __init__(self,input_size,pool_size,head,emb_size) -> None:

@@ -1,5 +1,5 @@
 from unicodedata import name
-from models.attention_series import feature_conbined_regression
+from models.attention_series import Infomer_Based
 import h5py
 from dataloaders.dataloaders import dataset_iron
 from torch.utils.data import DataLoader
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_set, shuffle=True, batch_size=1, num_workers=0, drop_last=True)
     # test_loader = DataLoader(test_set, shuffle=True, batch_size=1, num_workers=0, drop_last=True)
     
-    model = feature_conbined_regression(freeze=False).to(device)
-    train_regression(train_loader, model, 1000000, lr=0.0005, tag="500采样 窗口9 RI", vis=model.visualization)
+    model = Infomer_Based().to(device)
+    train_regression(train_loader, model, 1000000, lr=0.0005, tag="informer", vis=None)
 
 

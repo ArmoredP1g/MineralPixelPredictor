@@ -1,2 +1,4 @@
 *.pyc
 *.pt
+*.csv
+*.hdf5
