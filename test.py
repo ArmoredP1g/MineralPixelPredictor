@@ -7,13 +7,20 @@ import ast
 from configs.training_cfg import device
 from PIL import Image
 from models.ProbSparse_Self_Attention import ProbSparse_Self_Attention_Block
-from models.attention_series import Infomer_Based
-from models.SoftPool import SoftPool_2d
+from models.attention_series import MCV_Split_Attn
+from models.SoftPool import AttnPool_2d
+from torch.cuda.amp import autocast
 
-def test3():
-    m = Infomer_Based().to(device)
-    input = torch.randn(500,296).to(device)
+def test4():
+    m = MCV_Split_Attn(attn=True, sample_factor=5).to(device)
+    input = torch.rand(25,300).to(device)
+    with autocast():
+        output = m(input)
+    print("")
 
+def test_attn_pool2d():
+    m = AttnPool_2d(2,8,16,24,4,8,2).to(device)
+    input = torch.rand(4,20,20,8).to(device)
     output = m(input)
     print("")
 
@@ -77,6 +84,6 @@ def test2():
     print("")
 
 if __name__ == "__main__":
-    test3()
+    test4()
     print("")
 

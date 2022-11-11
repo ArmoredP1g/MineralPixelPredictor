@@ -3,6 +3,7 @@ from torch.cuda.amp import autocast as autocast
 import torch
 from torch.nn import CrossEntropyLoss
 from torch.utils.tensorboard import SummaryWriter
+from torch.cuda.amp import autocast
 from configs.training_cfg import device
 
 def train_classifier(train_loader, test_loader, model, epoch, lr=0.001, tag="unamed", vis=None):
@@ -23,10 +24,12 @@ def train_classifier(train_loader, test_loader, model, epoch, lr=0.001, tag="una
             total_step += 1
             label = torch.Tensor(label).to(device)
             optimizer.zero_grad()
-            output = model(data.to(device))
-            loss = loss_fn(output, label-1) #0是无效的
+            with autocast():
+                output = model(data.to(device))
+                loss = loss_fn(output, label-1) #0是无效的
             loss.backward()
             optimizer.step()
+            print(total_step)
 
             loss_sum += loss
             if total_step%50 == 0:
@@ -72,19 +75,24 @@ def train_regression(train_loader, model, epoch, test_loader=False, lr=0.001, ta
                     eps=1e-08,
                     weight_decay=0.0001,
                     amsgrad=False)
-    
+    loss_fn=torch.nn.HuberLoss(reduction='mean', delta=5)
+
+
     total_step = 0
     loss_sum = 0
     for epoch in range(epoch):
         for _, (data, gt) in enumerate(train_loader, 0):
             total_step += 1
-            label = torch.Tensor(gt['gt_TFe']).to(device)
+            label = gt['gt_TFe'].to(device)
+            batch = data.shape[1]
             optimizer.zero_grad()
-            output = model(data.to(device).squeeze(0))
-            loss = (output.mean()-label).pow(2)
+            with autocast():
+                output = model(data.to(device).squeeze(0))
+                loss = loss_fn(output*100, label.unsqueeze(0).repeat(batch,1).float()*100)
+                # loss = (output.mean()-label).pow(2)
             loss.backward()
             optimizer.step()
-
+            print(total_step)
             loss_sum += loss
             if total_step%50 == 0:
                 print("loss: {}".format(loss.item()))
@@ -97,16 +105,16 @@ def train_regression(train_loader, model, epoch, test_loader=False, lr=0.001, ta
                 loss_sum = 0
 
             # 可视化内容
-            if total_step%5000 == 0:
+            if total_step%1000 == 0:
                 if vis != None:
                     vis(sum_writer, total_step)
 
-            if total_step % 5000 == 0:
+            if total_step % 2500 == 0:
                 # 测试集测试均方误差
                 total_mse = 0
                 if test_loader:
                     for  _, (data, label) in enumerate(test_loader, 0):
-                        label = torch.Tensor(label['gt_TFe']).to(device)
+                        label = label['gt_TFe'].to(device)
                         output = model(data.to(device).squeeze(0))
                         total_mse += (output.mean()-label).pow(2)
 

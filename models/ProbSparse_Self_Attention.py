@@ -15,23 +15,26 @@ class ProbSparse_Self_Attention_Block(nn.Module):
             'sparse': False,
             'sf_q': 5,   # sampling factor, sf_q*log(len) q_vecs will be selected.
             'sf_k': 5,   # sampling factor for k
+            'res': True
         }
 
         self.args.update(kwargs)
 
+        self.res = self.args['res']
         
         self.WQ = nn.Linear(self.args['input_dim'], self.args['heads']*self.args['qk_dim'], bias=False)
         self.WK = nn.Linear(self.args['input_dim'], self.args['heads']*self.args['qk_dim'], bias=False)
         self.WV = nn.Linear(self.args['input_dim'], self.args['heads']*self.args['input_dim'], bias=False)
         self.WZ = nn.Linear(self.args['heads']*self.args['input_dim'], self.args['input_dim'])
         
+
         self.MLP_1 = nn.Linear(self.args['input_dim'], self.args['dim_feedforward'])
         self.MLP_2 = nn.Linear(self.args['dim_feedforward'], self.args['input_dim'])
         self.layer_norm = nn.LayerNorm(self.args['input_dim'])
         self.soft = nn.Softmax(dim=1)
         self.elu = nn.ELU()
 
-    def forward(self,x):    # input: [batch, len, dim] / [batch, len, dim]
+    def forward(self,x):    # input: [batch, len, dim] / [batch, row, col, dim]
         shape = x.shape
         reshape_flag = False
         b,l,d,r,c = 0,0,0,0,0
@@ -68,7 +71,7 @@ class ProbSparse_Self_Attention_Block(nn.Module):
         
             # randomly select sf_k*ln(len) keys to calculate M
             # random_keys = k.unsqueeze(1).repeat(1,l,1,1,1)[:, torch.randint(l,(sample_k,)),:,:,:] # [l,sample_k,b,h,d]
-            random_keys = k.unsqueeze(1).repeat(1,l,1,1,1)[torch.arange(l).unsqueeze(1), torch.randint(l,(l,sample_k)),:,:,:] # [l,sample_k,b,h,d]
+            random_keys = k.unsqueeze(1).repeat(1,l,1,1,1)[torch.arange(l).unsqueeze(1), torch.randint(l,(l,sample_k)),:,:,:] # [l,sample_k,b,h,d] 
 
             # calculate sparsity, pick top sample_q Qs
             sparsity = torch.max((q*random_keys).sum(dim=4), dim=1)[0] - (q*random_keys).sum(dim=4).mean(dim=1)  # [len, batch, heads]
