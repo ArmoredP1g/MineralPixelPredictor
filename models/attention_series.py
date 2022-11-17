@@ -313,7 +313,7 @@ class MCV_Split_Attn(nn.Module):
             x2[:,:,:,96:] = self.attn_1(positionalencoding2d(32,19,19).permute(1,2,0).unsqueeze(0).repeat(b,1,1,1).to(x.device) + x[:,:,:,96:])
             x = x2
             del x2
-        
+            
         x = torch.cat(list(x.unsqueeze(0).split(32,4)), dim=0)     # [4, b, 19, 19, 32]
         x = x*torch.tanh(self.weight_mask.reshape(4,1,19*19,1)).reshape(4,1,19,19,1)  # [4, b, 19, 19, 32]
         x = x.sum(dim=(2,3))   # [8,b,32]
@@ -327,12 +327,12 @@ class MCV_Split_Attn(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
-                # nn.init.normal_(m.weight,mean=1,std=1)
+                # nn.init.normal_(m.weight,mean=0,std=0.15)
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight)
-                # nn.init.normal_(m.weight,mean=1,std=1)
+                # nn.init.normal_(m.weight,mean=0,std=0.15)
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
 
@@ -398,6 +398,7 @@ class feature_conbined_regression(nn.Module):
         
     
     def forward(self, x):
+        x = x[:,:-4]
         DI = x.unsqueeze(1)-x.unsqueeze(2)
         NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
         

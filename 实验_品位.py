@@ -1,5 +1,5 @@
 from unicodedata import name
-from models.attention_series import Infomer_Based_2d, MCV_Split_Attn
+from models.attention_series import MCV_Split_Attn, feature_conbined_regression
 import h5py
 from dataloaders.dataloaders import dataset_iron
 from torch.utils.data import DataLoader
@@ -17,11 +17,15 @@ if __name__ == "__main__":
     '23_C', '24_A', '24_B', '24_C', '25_A', '25_B', '25_C', '26_A', 
     '26_B', '26_C']
 
+
+    # train_list = ['21_A', '22_A', '11_C', '17_A', '15_A', '15_B']
+
+
     test_list = ['10_A', '10_B', '10_C', '9_A', 
     '9_B', '9_C']
 
     train_set = dataset_iron("D:\\source\\repos\\Pixel-wise-hyperspectral-feature-classification-experiment\\notbooks\\spectral_data_winsize9_300.csv", 
-            "D:\\source\\repos\\Pixel-wise-hyperspectral-feature-classification-experiment\\notbooks\\spectral_data_winsize9_300.hdf5", train_list, 100)
+            "D:\\source\\repos\\Pixel-wise-hyperspectral-feature-classification-experiment\\notbooks\\spectral_data_winsize9_300.hdf5", train_list, 600)
 
     # test_set = dataset_iron("E:\\成像光谱\\spectral_data_winsize5.csv", "E:\\成像光谱\\spectral_data_winsize5.hdf5", train_list, 2000)
     # train_set, test_set = random_split(dataset, [dataset.__len__()-2, 2], generator=torch.Generator().manual_seed(42))
@@ -30,8 +34,8 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_set, shuffle=True, batch_size=1, num_workers=0, drop_last=True)
     # test_loader = DataLoader(test_set, shuffle=True, batch_size=1, num_workers=0, drop_last=True)
     
-    model = MCV_Split_Attn(attn=True).to(device)
-    model.weight_init()
-    train_regression(train_loader, model, 1000000, lr=0.0005, tag="MCV_4_初始化权重_huber", vis=model.visualization)
+    model = MCV_Split_Attn(attn=False).to(device)
+#     model.weight_init()
+    train_regression(train_loader, model, 1000000, lr=0.0005, tag="分布损失", vis=model.visualization)
 
 
