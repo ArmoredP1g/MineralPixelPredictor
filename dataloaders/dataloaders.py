@@ -3,7 +3,7 @@ import torch
 import h5py
 import spectral
 from torch.utils.data.dataset import Dataset
-from configs.training_cfg import device, hdf5_path
+from configs.training_cfg import device
 import itertools
 
 class dataset_iron_mixed(Dataset):
@@ -108,7 +108,7 @@ class dataset_iron_balanced_mixed(Dataset):
     
     def __getitem__(self, index):
         if self.hdf5 is None:
-            self.hdf5 = h5py.File(self.path_hdf5, 'r')['data']
+            self.hdf5 = h5py.File(self.path_hdf5, 'r')
         gt = {
             'gt_TFe': []
         }
