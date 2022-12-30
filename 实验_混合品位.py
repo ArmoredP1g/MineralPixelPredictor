@@ -1,7 +1,7 @@
 from unicodedata import name
 from models.attention_series import Grade_regressor
 import h5py
-from dataloaders.dataloaders import dataset_iron_balanced_mixed, dataset_iron_mixed
+from dataloaders.dataloaders import dataset_iron_balanced_mixed
 from torch.utils.data import DataLoader
 from torch.utils.data  import random_split
 from trainer import train_regression_mix
@@ -34,18 +34,18 @@ if __name__ == "__main__":
 
 
 
-    train_set = dataset_iron_balanced_mixed("E:\\近红外部分\\spectral_data_IR_winsize3.pkl", 
-            "E:\\近红外部分\\spectral_data_IR_winsize3.hdf5", train_list, 96, balance=True) 
+    train_set = dataset_iron_balanced_mixed("D:\\source\\repos\Pixel-wise-hyperspectral-feature-classification-experiment\\notbooks\\spectral_data_winsize3.csv", 
+            "D:\\source\\repos\Pixel-wise-hyperspectral-feature-classification-experiment\\notbooks\spectral_data_IR_winsize3.hdf5", 100000, train_list, 96, balance=True) 
 
     # test_set = dataset_iron("E:\\成像光谱\\spectral_data_winsize5.csv", "E:\\成像光谱\\spectral_data_winsize5.hdf5", train_list, 2000)
     # train_set, test_set = random_split(dataset, [dataset.__len__()-2, 2], generator=torch.Generator().manual_seed(42)) 
 
-    train_loader = DataLoader(train_set, shuffle=True, batch_size=1, num_workers=4, drop_last=True)
+    train_loader = DataLoader(train_set, shuffle=True, batch_size=1, num_workers=8, drop_last=True)
     # test_loader = DataLoader(test_set, shuffle=True, batch_size=1, num_workers=0, drop_last=True)
     
     model = Grade_regressor().to(device)
     # model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/(1预训练)精选 MSE 混合 lr8e-7 b250 dropout0.2_2000.pt"))
-    model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/近红外3_9500.pt")) 
+#     model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/近红外3_9500.pt")) 
     # model.weight_init() 
-    train_regression_mix(train_loader, model, 1000000, lr=1e-5*0.311192830511, tag="近红外3", lr_decay=0.92, lr_decay_step=1000, lr_lower_bound=1e-7, step=14001, vis=model.visualization)
+    train_regression_mix(train_loader, model, 1000000, lr=1e-5, tag="测试新数据集", lr_decay=0.92, lr_decay_step=1000, lr_lower_bound=1e-7, step=0, vis=model.visualization)
 
