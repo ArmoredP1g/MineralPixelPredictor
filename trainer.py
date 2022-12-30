@@ -100,11 +100,11 @@ def train_classifier(train_loader, test_loader, model, epoch, lr=0.001, tag="una
     torch.save(model.state_dict(), "./ckpt/{}_{}.pt".format(tag, total_step))
                             
 
-def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_decay=0, lr_decay_step=5000, lr_lower_bound=5e-7, vis=None):
+def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_decay=0, lr_decay_step=5000, lr_lower_bound=5e-7, step=0, vis=None):
     # 评估相关
     pool = torch.nn.AvgPool2d(9,9)
     mask_rgb_values = [[255,242,0],[34,177,76],[255,0,88]]
-    spec_id = [9,11,14]
+    spec_id = [9,17,14]
     mask_list = []
     tensor_list = []
     label_list = []
@@ -137,7 +137,7 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
     # loss_fn=torch.nn.HuberLoss(reduction='mean', delta=8)
     mse_loss = torch.nn.MSELoss()
 
-    total_step = 0
+    total_step = step
 
     loss_sum = 0
     MSE_loss_sum = 0
@@ -158,7 +158,7 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
             loss = MSE_loss
             loss.backward()
             optimizer.step()
-            # print(total_step)
+            print(total_step)
             loss_sum += loss
             MSE_loss_sum += MSE_loss
 
