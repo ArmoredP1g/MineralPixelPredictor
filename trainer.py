@@ -103,19 +103,19 @@ def train_classifier(train_loader, test_loader, model, epoch, lr=0.001, tag="una
 def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_decay=0, lr_decay_step=5000, lr_lower_bound=5e-7, step=0, vis=None):
     # 评估相关
     pool = torch.nn.AvgPool2d(9,9)
-    mask_rgb_values = [[255,242,0],[34,177,76],[255,0,88]]
-    spec_id = [9,17,14]
+    mask_rgb_values = [[255,242,0],[34,177,76],[255,0,88],[184,61,186]]
+    spec_id = [10,11]
     mask_list = []
     tensor_list = []
     label_list = []
     for id in spec_id:
-        img = spectral.envi.open("D:\\可见光部分\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr".format(id))
+        img = spectral.envi.open("D:\\可见光粉末\\spectral_data\\{}-RadianceConversion-CorrectFromMeasuredReference.bip.hdr".format(id))
 
         # 根据模型使用波段选择
         # img_data = torch.Tensor(img.asarray()/6000)[:,:,:-4]
         img_data = torch.Tensor(img.asarray()/6000)[:,:,:]
         # img_data = pool(img_data.permute(1,2,0)).permute(2,0,1)
-        mask = np.array(Image.open("D:\\可见光部分\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr_mask.png".format(id)))
+        mask = np.array(Image.open("D:\\可见光粉末\\spectral_data\\{}-RadianceConversion-CorrectFromMeasuredReference.bip.hdr_mask.png".format(id)))
         mask_list.append(mask)
         gt_TFe = ast.literal_eval(img.metadata['gt_TFe'])
         label_list.append(gt_TFe)
@@ -205,18 +205,15 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
 
                     heat_map = torch.cat(heat_map, dim=0)
 
-                    predict_sum = torch.Tensor([0.,0.,0.])
-                    pixel_count = torch.Tensor([0, 0, 0])
+                    predict_sum = torch.Tensor([0.,0.,0.,0.])
+                    pixel_count = torch.Tensor([0, 0, 0, 0])
                     gt = torch.Tensor(label_list[idx])
-
-                    values = [[],[],[]] # 分析数据分布
 
                     for r in range(row):
                         for c in range(col):
-                            for i in range(3):
-                                if mask_list[idx][r*9+4,c*9+4][:-1].tolist() == mask_rgb_values[i]:
-                                    predict_sum[i] += heat_map[r,c] 
-                                    values[i].append(heat_map[r,c])    # 分析数据分布
+                            for i in range(4):
+                                if mask_list[idx][r*9+4,c*9+4].tolist() == mask_rgb_values[i]:
+                                    predict_sum[i] += heat_map[r,c]
                                     pixel_count[i] += 1
 
                     prediction = predict_sum / pixel_count * 100
