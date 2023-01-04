@@ -104,7 +104,7 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
     # 评估相关
     pool = torch.nn.AvgPool2d(9,9)
     mask_rgb_values = [[255,242,0],[34,177,76],[255,0,88]]
-    spec_id = [9,17,14]
+    spec_id = [9,11,14]
     mask_list = []
     tensor_list = []
     label_list = []

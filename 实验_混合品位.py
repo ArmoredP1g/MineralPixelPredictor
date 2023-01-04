@@ -13,11 +13,11 @@ torch.autograd.set_detect_anomaly(True)
 if __name__ == "__main__":
 
     # # 全部样本
-    train_list = ['10_A','10_B','10_C','11_A','11_B','11_C','12_A','12_B','12_C',
-                  '13_A','13_B','13_C','15_A','15_B','15_C','16_A','16_B','16_C',
+    train_list = ['10_A','10_B','10_C','12_A','12_B','12_C',
+                  '13_A','13_B','13_C','15_A','15_B','15_C','16_A','16_B','16_C','17_A','17_B','17_C',
                   '18_A','18_B','18_C','19_A','19_B','19_C','20_A','20_B','20_C',
                   '21_B','22_B','23_A','23_B','23_C','24_A','24_B','24_C',
-                  '25_A','25_B','25_C','26_A','26_B','26_C','27_A','27_B','27_C','28_A','28_B','28_C','29_A','29_B','29_C',
+                  '25_A','25_B','25_C','26_A','26_B','26_C','27_A','27_B','27_C','28_A','28_B','29_A','29_B','29_C',
                   '30_A','30_B','30_C','31_A','31_B','31_C','32_A','32_B','32_C','33_A','33_B','33_C',
                   '34_A','34_B','34_C','35_A','35_B','35_C','36_A','36_B','36_C','37_A','37_B','37_C',
                   '38_A','38_B','38_C','39_A','39_B','39_C','40_A','40_B','40_C','41_A','41_B','41_C',
@@ -28,22 +28,22 @@ if __name__ == "__main__":
                   '58_A','58_B','58_C','59_A','59_B','59_C','60_A','60_B','60_C','61_A','61_B','61_C',
                   '62_A','62_B','62_C','63_A','63_B','63_C','64_A']
 
-    #for test: 9,14,17
+    #for test: 9,14,11
 
 
 
-    train_set = dataset_iron_balanced_mixed("D:\\source\\repos\Pixel-wise-hyperspectral-feature-classification-experiment\\notbooks\\spectral_data_winsize3.csv", 
-            "D:\\source\\repos\Pixel-wise-hyperspectral-feature-classification-experiment\\notbooks\spectral_data_IR_winsize3.hdf5", 100000, train_list, 96, balance=True) 
+    train_set = dataset_iron_balanced_mixed("D:\\可见光部分\\spectral_data_winsize9.csv", 
+            "D:\\可见光部分\\spectral_data_winsize9.hdf5", 100000, train_list, 96, balance=True) 
 
     # test_set = dataset_iron("E:\\成像光谱\\spectral_data_winsize5.csv", "E:\\成像光谱\\spectral_data_winsize5.hdf5", train_list, 2000)
     # train_set, test_set = random_split(dataset, [dataset.__len__()-2, 2], generator=torch.Generator().manual_seed(42)) 
 
-    train_loader = DataLoader(train_set, shuffle=True, batch_size=1, num_workers=8, drop_last=True)
+    train_loader = DataLoader(train_set, shuffle=True, batch_size=1, num_workers=7, drop_last=True)
     # test_loader = DataLoader(test_set, shuffle=True, batch_size=1, num_workers=0, drop_last=True)
     
     model = Grade_regressor().to(device)
     # model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/(1预训练)精选 MSE 混合 lr8e-7 b250 dropout0.2_2000.pt"))
 #     model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/近红外3_9500.pt")) 
     # model.weight_init() 
-    train_regression_mix(train_loader, model, 1000000, lr=1e-5, tag="测试新数据集", lr_decay=0.92, lr_decay_step=1000, lr_lower_bound=1e-7, step=0, vis=model.visualization)
+    train_regression_mix(train_loader, model, 1000000, lr=1e-5, tag="测试新数据集", lr_decay=0.94, lr_decay_step=1000, lr_lower_bound=1e-7, step=0, vis=model.visualization)
 
