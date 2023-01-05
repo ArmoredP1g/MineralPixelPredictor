@@ -14,16 +14,16 @@ plt.rcParams['font.size'] = 9
 class Spec_Encoder_Linear(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.up_sampling_0 = nn.Conv2d(64,128,1,1,bias=True)
-        self.up_sampling_1 = nn.Conv2d(128,256,1,1,bias=True)
-        self.up_sampling_2 = nn.Conv2d(256,512,1,1,bias=True)
+        self.down_sampling_0 = nn.Conv2d(784,640,1,1,bias=True)
+        self.down_sampling_1 = nn.Conv2d(640,512,1,1,bias=True)
+        self.down_sampling_2 = nn.Conv2d(512,256,1,1,bias=True)
 
         self.soft = nn.Softmax(dim=2)
-        self.weight_mask = nn.Parameter(torch.ones(16,1,42,42,1)/1e6)   # multiplied with: head(8), batch, row, col, dim
+        self.weight_mask = nn.Parameter(torch.ones(16,1,12,12,1)/1e6)   # multiplied with: head(16), batch, row, col, dim
 
-    def forward(self, x):
-        x_norm=((x-x.min(dim=1)[0].unsqueeze(1))/(x.max(dim=1)[0]-x.min(dim=1)[0]+1e-5).unsqueeze(1))    # [batch, 168]
-
+    def forward(self, x):   # [b, 168]
+        x[:,-1] = 0
+        x_norm=((x-x.min(dim=1)[0].unsqueeze(1))/(x.max(dim=1)[0]-x.min(dim=1)[0]+1e-5).unsqueeze(1))
         DI = x.unsqueeze(1)-x.unsqueeze(2)  # [batch, 168, 168]
         NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
         DI_NORM = x_norm.unsqueeze(1)-x_norm.unsqueeze(2)  # [batch, 168, 168]
@@ -35,22 +35,23 @@ class Spec_Encoder_Linear(nn.Module):
 
         # tensor split
         new_tensor = []
-        for row in range(4):
-            for col in range(4):
-                new_tensor.append(x[:,row*42:(row+1)*42,col*42:(col+1)*42,:])
+        for row in range(14):
+            for col in range(14):
+                new_tensor.append(x[:,row*12:(row+1)*12,col*12:(col+1)*12,:])
 
-        x = torch.cat(new_tensor, dim=3) # [batch, 42, 42, 64]
+        x = torch.cat(new_tensor, dim=3) # [batch, 12, 12, 784]
 
-        x = torch.relu(self.up_sampling_0(x.permute(0,3,1,2)))
-        x = torch.relu(self.up_sampling_1(x))
-        x = torch.relu(self.up_sampling_2(x))
-        x = x.permute(0,2,3,1)  # [b, 42, 42, 512]
+        # branch A
+        x = torch.relu(self.down_sampling_0(x.permute(0,3,1,2)))
+        x = torch.relu(self.down_sampling_1(x))
+        x = torch.relu(self.down_sampling_2(x))
+        x = x.permute(0,2,3,1)  # [b, 12, 12, 256]
 
 
-        x = torch.cat(list(x.unsqueeze(0).split(32,4)), dim=0)     # [16, b, 42, 42, 32]
-        x = x*self.soft(self.weight_mask.reshape(16,1,42*42,1)).reshape(16,1,42,42,1)  # [16, b, 21, 21, 32]
-        x = x.sum(dim=(2,3))   # [16,b,32]
-        x = x.transpose(0,1).reshape(b,512) # [batch, 512]
+        x = torch.cat(list(x.unsqueeze(0).split(16,4)), dim=0)     # [16, b, 12, 12, 16]
+        x = x*self.soft(self.weight_mask.reshape(16,1,12*12,1)).reshape(16,1,12,12,1)  # [16, b, 12, 12, 16]
+        x = x.sum(dim=(2,3))   # [16,b,16]
+        x = x.transpose(0,1).reshape(b,256) # [batch, 256]
         return torch.relu(x)
 
 
@@ -58,12 +59,12 @@ class Spec_Decoder(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.dropout = nn.Dropout(p=0.2)
-        self.ln1 = nn.LayerNorm(256)
-        self.ln2 = nn.LayerNorm(128)
+        self.ln1 = nn.LayerNorm(128)
+        self.ln2 = nn.LayerNorm(96)
         self.ln3 = nn.LayerNorm(64)
-        self.fc0 = nn.Linear(512,256)
-        self.fc1 = nn.Linear(256,128)
-        self.fc2 = nn.Linear(128,64)
+        self.fc0 = nn.Linear(256,128)
+        self.fc1 = nn.Linear(128,96)
+        self.fc2 = nn.Linear(96,64)
         self.fc_out = nn.Linear(64,1)
 
     def forward(self, x):
@@ -73,9 +74,8 @@ class Spec_Decoder(nn.Module):
         x = torch.tanh(x)
         x = self.ln3(self.fc2(x))
         x = torch.tanh(x)
-        x = (torch.tanh(self.fc_out(x)) + 1)*0.5
-        # x = self.fc_out(x)
-        # x = torch.clamp(x, min=0, max=1)
+        # x = (torch.tanh(self.fc_out(x)) + 1)*0.5
+        x = torch.clamp(self.fc_out(x), min=0, max=1)
         return x
 
 
@@ -100,6 +100,17 @@ class Grade_regressor(nn.Module):
         ], dim=1)
 
         return x
+    
+    # def weight_init(self):
+    #     for m in self.modules():
+    #         if isinstance(m, nn.Linear):
+    #             nn.init.normal_(m.weight,mean=0,std=0.15)
+    #             if m.bias is not None:
+    #                 nn.init.constant_(m.bias, 0)
+    #         elif isinstance(m, nn.Conv2d):
+    #             nn.init.normal_(m.weight,mean=0,std=0.15)
+    #             if m.bias is not None:
+    #                 nn.init.constant_(m.bias, 0)
     
     def visualization(self, sum_writer, scale):
         '''
