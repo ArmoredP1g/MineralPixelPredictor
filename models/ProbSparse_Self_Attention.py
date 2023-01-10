@@ -111,6 +111,7 @@ class Self_Attention_Decoder(nn.Module):
             'heads': 8,
             'dim_feedforward': 24
         }
+        self.args.update(kwargs)
 
         self.WK = nn.Linear(self.args['input_dim'], self.args['heads']*self.args['qk_dim'], bias=False)
         self.WV = nn.Linear(self.args['input_dim'], self.args['heads']*self.args['qk_dim'], bias=False)
