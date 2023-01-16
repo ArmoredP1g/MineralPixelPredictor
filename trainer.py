@@ -109,13 +109,13 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
     tensor_list = []
     label_list = []
     for id in spec_id:
-        img = spectral.envi.open("D:\\可见光部分\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr".format(id))
+        img = spectral.envi.open("E:\\d盘备份\\可见光部分\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr".format(id))
 
         # 根据模型使用波段选择
         # img_data = torch.Tensor(img.asarray()/6000)[:,:,:-4]
         img_data = torch.Tensor(img.asarray()/6000)[:,:,:]
         # img_data = pool(img_data.permute(1,2,0)).permute(2,0,1)
-        mask = np.array(Image.open("D:\\可见光部分\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr_mask.png".format(id)))
+        mask = np.array(Image.open("E:\\d盘备份\\可见光部分\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr_mask.png".format(id)))
         mask_list.append(mask)
         gt_TFe = ast.literal_eval(img.metadata['gt_TFe'])
         label_list.append(gt_TFe)
@@ -158,7 +158,7 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
             loss = MSE_loss
             loss.backward()
             optimizer.step()
-            print(total_step)
+            # print(total_step)
             loss_sum += loss
             MSE_loss_sum += MSE_loss
 

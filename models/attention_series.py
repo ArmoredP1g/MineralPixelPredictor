@@ -29,11 +29,13 @@ class Spec_Encoder_Linear(nn.Module):
 
         DI = x.unsqueeze(1)-x.unsqueeze(2)  # [batch, 304, 304]
         NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
+        RI = x.unsqueeze(1)/(x.unsqueeze(2)+x.unsqueeze(1)+1e-5)      # The division operation results in 
+                                                    # a wide range of RI values, +self in the denominator to 
+                                                    # stabilizes the model performance
         DI_NORM = x_norm.unsqueeze(1)-x_norm.unsqueeze(2)  # [batch, 304, 304]
-        NDI_NORM = (x_norm.unsqueeze(1)-x_norm.unsqueeze(2))/(x_norm.unsqueeze(1)+x_norm.unsqueeze(2)+1e-5)
 
-        x = torch.cat([DI.unsqueeze(3), NDI.unsqueeze(3), DI_NORM.unsqueeze(3), NDI_NORM.unsqueeze(3)], dim=3)   # [batch, 304, 304, 4]
-        del DI, NDI, DI_NORM, NDI_NORM
+        x = torch.cat([DI.unsqueeze(3), NDI.unsqueeze(3), DI_NORM.unsqueeze(3), RI.unsqueeze(3)], dim=3)   # [batch, 304, 304, 4]
+        del DI, NDI, DI_NORM, RI
         b,r,c,d = x.shape
 
         # tensor split
@@ -71,12 +73,13 @@ class Spec_Decoder(nn.Module):
         self.fc_out = nn.Linear(64,1)
 
     def forward(self, x):
-        x = self.ln1(self.fc0(x))
-        x = torch.tanh(x)
-        x = self.ln2(self.fc1(x))
-        x = torch.tanh(x)
-        x = self.ln3(self.fc2(x))
-        x = torch.tanh(x)
+        x = torch.relu(self.fc0(x))
+        x = self.ln1(x+1e-5)
+        x = torch.relu(self.fc1(x))
+        x = self.ln2(x+1e-5)
+        x = torch.relu(self.fc2(x))
+        x = self.ln3(x+1e-5)
+
         x = (torch.tanh(self.fc_out(x)) + 1)*0.5
         # x = self.fc_out(x)
         # x = torch.clamp(x, min=0, max=1)

@@ -32,8 +32,8 @@ if __name__ == "__main__":
 
 
 
-    train_set = dataset_iron_balanced_mixed("D:\\可见光部分\\spectral_data_winsize9.csv", 
-            "D:\\可见光部分\\spectral_data_winsize9.hdf5", 100000, train_list, 96, balance=True) 
+    train_set = dataset_iron_balanced_mixed("E:\\d盘备份\\可见光部分\\spectral_data_winsize9.csv", 
+            "E:\\d盘备份\\可见光部分\\spectral_data_winsize9.hdf5", 100000, train_list, 96, balance=True) 
 
     # test_set = dataset_iron("E:\\成像光谱\\spectral_data_winsize5.csv", "E:\\成像光谱\\spectral_data_winsize5.hdf5", train_list, 2000)
     # train_set, test_set = random_split(dataset, [dataset.__len__()-2, 2], generator=torch.Generator().manual_seed(42)) 
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     
     model = Grade_regressor().to(device)
     # model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/(1预训练)精选 MSE 混合 lr8e-7 b250 dropout0.2_2000.pt"))
-#     model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/近红外3_9500.pt")) 
+    # model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/替换回RI_tanh_2000.pt")) 
     # model.weight_init() 
-    train_regression_mix(train_loader, model, 1000000, lr=1e-5, tag="测试新数据集", lr_decay=0.94, lr_decay_step=1000, lr_lower_bound=1e-7, step=0, vis=model.visualization)
+    train_regression_mix(train_loader, model, 1000000, lr=1e-5*0.92, tag="替换回RI_relu", lr_decay=0.92, lr_decay_step=1000, lr_lower_bound=1e-7, step=1001, vis=model.visualization)
 
