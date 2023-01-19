@@ -43,7 +43,7 @@ if __name__ == "__main__":
     
     model = Grade_regressor().to(device)
     # model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/(1预训练)精选 MSE 混合 lr8e-7 b250 dropout0.2_2000.pt"))
-    # model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/替换回RI_tanh_2000.pt")) 
+    # model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/RELU+ALLINDEX_TANH_4000.pt")) 
     # model.weight_init() 
-    train_regression_mix(train_loader, model, 1000000, lr=1e-5*0.92, tag="替换回RI_relu", lr_decay=0.92, lr_decay_step=1000, lr_lower_bound=1e-7, step=1001, vis=model.visualization)
+    train_regression_mix(train_loader, model, 1000000, lr=1e-5, tag="RELU+ALLINDEX_TANH_LINEAR", lr_decay=0.93, lr_decay_step=1000, lr_lower_bound=1e-7, step=1, vis=model.visualization)
 

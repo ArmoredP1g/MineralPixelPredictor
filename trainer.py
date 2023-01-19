@@ -221,7 +221,7 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
 
                     prediction = predict_sum / pixel_count * 100
 
-                    err_list = ((prediction-gt)**2).tolist()
+                    err_list = torch.sqrt((prediction-gt)**2).tolist()
                     for e in err_list:
                         err += e
                         err_count += 1

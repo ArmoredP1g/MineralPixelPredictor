@@ -97,7 +97,6 @@ class BatchLognorm_KL_Loss():
 
 
 # 对极差的惩罚，看看这玩意能反向传播不
-# 妈的并不能
 class Range_Loss:
     def __init__(self, bins=20) -> None:
         self.bins = bins
