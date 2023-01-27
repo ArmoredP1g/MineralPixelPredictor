@@ -75,21 +75,22 @@ class Spec_Decoder(nn.Module):
         self.fc_out = nn.Linear(64,1)
 
     def forward(self, x):
-        x = self.ln1(self.fc0(x))
-        x = torch.tanh(x)
-        x = self.ln2(self.fc1(x))
-        x = torch.tanh(x)
-        x = self.ln3(self.fc2(x))
-        x = torch.tanh(x)
+        x = torch.relu(self.fc0(x))
+        x = self.ln1(x)
+        x = torch.relu(self.fc1(x))
+        x = self.ln2(x)
+        x = torch.relu(self.fc2(x))
+        x = self.ln3(x)
 
-        return (torch.tanh(self.fc_out(x)) + 1)*0.5
+        return torch.clamp(self.fc_out(x), max=1, min=0)
+
 
 
 class Grade_regressor(nn.Module):
-    def __init__(self, pretrain=False):
+    def __init__(self):
         super().__init__()
         self.encoder = Spec_Encoder_Linear()
-        self.decoder1 = Spec_Decoder(pretrain=pretrain)
+        self.decoder1 = Spec_Decoder()
         # self.decoder2 = Spec_Decoder()
         # self.decoder3 = Spec_Decoder()
         # self.decoder4 = Spec_Decoder()
