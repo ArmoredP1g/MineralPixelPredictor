@@ -14,8 +14,8 @@ plt.rcParams['font.size'] = 9
 class Spec_Encoder_Linear(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.down_sampling_0 = nn.Conv2d(784,640,1,1,bias=True)
-        self.down_sampling_1 = nn.Conv2d(640,512,1,1,bias=True)
+        self.down_sampling_0 = nn.Conv2d(1176,768,1,1,bias=True)
+        self.down_sampling_1 = nn.Conv2d(768,512,1,1,bias=True)
         self.down_sampling_2 = nn.Conv2d(512,256,1,1,bias=True)
 
         self.soft = nn.Softmax(dim=2)
@@ -24,13 +24,17 @@ class Spec_Encoder_Linear(nn.Module):
     def forward(self, x):   # [b, 168]
         x[:,-1] = 0
         x_norm=((x-x.min(dim=1)[0].unsqueeze(1))/(x.max(dim=1)[0]-x.min(dim=1)[0]+1e-5).unsqueeze(1))
-        DI = x.unsqueeze(1)-x.unsqueeze(2)  # [batch, 168, 168]
+        DI = x.unsqueeze(1)-x.unsqueeze(2) 
         NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
-        DI_NORM = x_norm.unsqueeze(1)-x_norm.unsqueeze(2)  # [batch, 168, 168]
+        RI = x.unsqueeze(1)/(x.unsqueeze(2)+x.unsqueeze(1)+1e-5)      # The division operation results in 
+                                                                      # a wide range of RI values, +self in the denominator to 
+                                                                      # stabilizes the model performance
+        DI_NORM = x_norm.unsqueeze(1)-x_norm.unsqueeze(2)  
         NDI_NORM = (x_norm.unsqueeze(1)-x_norm.unsqueeze(2))/(x_norm.unsqueeze(1)+x_norm.unsqueeze(2)+1e-5)
+        RI_NORM = x_norm.unsqueeze(1)/(x_norm.unsqueeze(2)+x_norm.unsqueeze(1)+1e-5)
 
-        x = torch.cat([DI.unsqueeze(3), NDI.unsqueeze(3), DI_NORM.unsqueeze(3), NDI_NORM.unsqueeze(3)], dim=3)   # [batch, 168, 168, 4]
-        del DI, NDI, DI_NORM, NDI_NORM
+        x = torch.cat([DI.unsqueeze(3), NDI.unsqueeze(3), RI.unsqueeze(3), DI_NORM.unsqueeze(3), NDI_NORM.unsqueeze(3), RI_NORM.unsqueeze(3)], dim=3)  
+        del DI, NDI, RI, DI_NORM, NDI_NORM, RI_NORM
         b,r,c,d = x.shape
 
         # tensor split
@@ -68,15 +72,16 @@ class Spec_Decoder(nn.Module):
         self.fc_out = nn.Linear(64,1)
 
     def forward(self, x):
-        x = self.ln1(self.fc0(x))
-        x = torch.tanh(x)
-        x = self.ln2(self.fc1(x))
-        x = torch.tanh(x)
-        x = self.ln3(self.fc2(x))
-        x = torch.tanh(x)
-        # x = (torch.tanh(self.fc_out(x)) + 1)*0.5
-        x = torch.clamp(self.fc_out(x), min=0, max=1)
-        return x
+        x = torch.relu(self.fc0(x))
+        x = self.ln1(x)
+        x = torch.relu(self.fc1(x))
+        x = self.ln2(x)
+        x = torch.relu(self.fc2(x))
+        x = self.ln3(x)
+
+        # return (torch.tanh(self.fc_out(x)) + 1)*0.5
+        return torch.clamp(self.fc_out(x), max=1, min=0)
+
 
 
 class Grade_regressor(nn.Module):
