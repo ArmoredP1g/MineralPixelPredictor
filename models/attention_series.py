@@ -62,6 +62,7 @@ class Spec_Encoder_Linear(nn.Module):
 class Spec_Decoder(nn.Module):
     def __init__(self) -> None:
         super().__init__()
+        self.pretrain_mode = False
         self.dropout = nn.Dropout(p=0.2)
         self.ln1 = nn.LayerNorm(128)
         self.ln2 = nn.LayerNorm(96)
@@ -79,10 +80,16 @@ class Spec_Decoder(nn.Module):
         x = torch.relu(self.fc2(x))
         x = self.ln3(x)
 
-        # return (torch.tanh(self.fc_out(x)) + 1)*0.5
-        return torch.clamp(self.fc_out(x), max=1, min=0)
+        if self.pretrain_mode:
+            return (torch.tanh(self.fc_out(x)) + 1)*0.5
+        else:
+            return torch.clamp(self.fc_out(x), max=1, min=0)
 
+    def pretrain_on(self):
+        self.pretrain_mode = True
 
+    def pretrain_off(self):
+        self.pretrain_mode = False
 
 class Grade_regressor(nn.Module):
     def __init__(self):

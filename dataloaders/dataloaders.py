@@ -37,7 +37,7 @@ class dataset_iron_balanced_mixed(Dataset):
         # 统计标签出现在各个区间段上的频率
         freq = torch.Tensor([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
         for id in self.sample_list:
-            label = float(self.df[self.df['sample_id']==id].sample().gt_TFe)
+            label = float(self.df[self.df['sample_id']==id].sample()['gt_TFe'])
             for i in range(20):
                 if i*5 < label <= (i+1)*5:
                     freq[i] += 1
@@ -56,12 +56,9 @@ class dataset_iron_balanced_mixed(Dataset):
     def __getitem__(self, index):
         if self.hdf5 is None:
             self.hdf5 = h5py.File(self.path_hdf5, 'r')
-        gt = {
-            'gt_TFe': []
-        }
 
         # id_list = torch.multinomial(self.freq, 1)
-        gt['gt_TFe'].append(self.label_list[self.training_list[index]]/100)
+        gt = self.label_list[self.training_list[index]]/100
 
         result = []
 

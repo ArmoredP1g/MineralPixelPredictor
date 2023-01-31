@@ -40,31 +40,7 @@ class learning_rate_adjuster():
             
 
 
-def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_decay=0, lr_decay_step=5000, lr_lower_bound=5e-7, step=0, vis=None):
-    # 评估相关
-    pool = torch.nn.AvgPool2d(3,3)
-    mask_rgb_values = [[255,242,0],[34,177,76],[255,0,88]]
-    spec_id = [14,19,54]
-    mask_list = []
-    tensor_list = []
-    label_list = []
-    for id in spec_id:
-        img = spectral.envi.open("E:\\d盘备份\\近红外部分\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr".format(id))
-
-        # 根据模型使用波段选择
-        # img_data = torch.Tensor(img.asarray()/6000)[:,:,:-4]
-        img_data = torch.Tensor(img.asarray()/6000)[:,:,:]
-        # img_data = pool(img_data.permute(1,2,0)).permute(2,0,1)
-        mask = np.array(Image.open("E:\\d盘备份\\近红外部分\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr_mask.png".format(id)))
-        mask_list.append(mask)
-        gt_TFe = ast.literal_eval(img.metadata['gt_TFe'])
-        label_list.append(gt_TFe)
-
-        with torch.no_grad():
-            img_data = pool(img_data.permute(2,0,1)).permute(1,2,0)
-            tensor_list.append(img_data)
-
-
+def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", pretrain_step=0, lr_decay=0, lr_decay_step=5000, lr_lower_bound=5e-7, step=0, test_data=None, vis=None):
     # 训练相关
     sum_writer = SummaryWriter("./runs/{}".format(tag))
     optimizer = AdamW(model.parameters(),
@@ -84,9 +60,12 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
 
     for epoch in range(epoch):
         for _, (data, gt) in enumerate(train_loader, 0):
+            if total_step == pretrain_step:
+                model.decoder1.pretrain_off()   # 结束预训练
+
             total_step+=1
             avg_label = torch.Tensor([
-                torch.Tensor(gt['gt_TFe']).mean()
+                torch.Tensor(gt)
             ]).to(device)
 
 
@@ -124,47 +103,32 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
                 if vis != None:
                     vis(sum_writer, total_step)
 
-            if total_step % 500 == 0:
+            if total_step % 1000 == 0:
                 # 测试样本绝对误差
                 model.eval()
                 err = 0
                 err_count = 0
 
-                for idx in range(tensor_list.__len__()):
+                for d in test_data:
+                    data = d['tensor']
+                    gt = d['gt']
                     with torch.no_grad():
-                        row,col,_ = tensor_list[idx].shape
-                        heat_map = []
-
-                        for i in range(row):
-                            heat_map.append(model(tensor_list[idx][i].to(device)).squeeze(1).unsqueeze(0).to("cpu"))   # 只评估Tfe
+                        len = data.shape[0]
+                        cur = 0
+                        pixelwise_prediction = []
+                        while cur + 100 <= len:
+                            pixelwise_prediction.append(model(data[cur:cur+100]).to("cpu"))
+                            cur += 100
                             torch.cuda.empty_cache()
-                            if (i+1)%50 == 0:
-                                print("\r已生成{}行结果".format(i+1), end="")
-                        
-                        print("")
 
-                    heat_map = torch.cat(heat_map, dim=0)
+                        if cur != len:
+                            pixelwise_prediction.append(model(data[cur:len]).to("cpu"))
 
-                    predict_sum = torch.Tensor([0.,0.,0.])
-                    pixel_count = torch.Tensor([0, 0, 0])
-                    gt = torch.Tensor(label_list[idx])
-
-                    values = [[],[],[]] # 分析数据分布
-
-                    for r in range(row):
-                        for c in range(col):
-                            for i in range(3):
-                                if mask_list[idx][r*3+1,c*3+1].tolist() == mask_rgb_values[i]:  # 对应近红外部分得改
-                                    predict_sum[i] += heat_map[r,c] 
-                                    values[i].append(heat_map[r,c])    # 分析数据分布
-                                    pixel_count[i] += 1
-
-                    prediction = predict_sum / pixel_count * 100
-
-                    err_list = (torch.abs(prediction-gt)).tolist()
-                    for e in err_list:
-                        err += e
-                        err_count += 1
+                        pixelwise_prediction = torch.cat(pixelwise_prediction, dim=0)
+                    prediction = pixelwise_prediction.mean()*100
+                    err += torch.abs(gt - prediction)
+                    err_count += 1
+                    print("测试样本")
 
 
                 avg_err = err/(err_count)
