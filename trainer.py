@@ -39,92 +39,8 @@ class learning_rate_adjuster():
                 print("lr update to：{}".format(self.cur_lr))
             
 
-def train_classifier(train_loader, test_loader, model, epoch, lr=0.001, tag="unamed", vis=None):
-    sum_writer = SummaryWriter("./runs/{}".format(tag))
-    
-    optimizer = AdamW(model.parameters(),
-                    lr=lr,
-                    betas=(0.9, 0.999),
-                    eps=1e-08,
-                    # weight_decay=0.00001,
-                    amsgrad=False)
-    loss_fn = CrossEntropyLoss()
-    
-    total_step = 0
-    loss_sum = 0
-    for epoch in range(epoch):
-        for _, (data, label) in enumerate(train_loader, 0):
-            total_step += 1
-            label = torch.Tensor(label).to(device)
-            optimizer.zero_grad()
-            with autocast():
-                output = model(data.to(device))
-                loss = loss_fn(output, label-1) #0是无效的
-            loss.backward()
-            optimizer.step()
-            # print(total_step)
 
-            loss_sum += loss
-            if total_step%50 == 0:
-                print("step:{}  loss:{}".format(total_step,loss))
-
-            if total_step%200 == 0:
-                sum_writer.add_scalar(tag='loss',
-                                        scalar_value=loss_sum / 200,
-                                        global_step=total_step
-                                    )
-                loss_sum = 0
-
-            # 可视化内容
-            if total_step%10000 == 0:
-                if vis != None:
-                    vis(sum_writer, total_step)
-
-            if total_step % 20000 == 0:
-                # 测试集测试准确率
-                correct = 0
-                for  _, (data, label) in enumerate(test_loader, 0):
-                    label = torch.Tensor(label).to(device)
-                    output = model(data.to(device))
-                    prediction = torch.argmax(output, dim=1)
-                    correct += (prediction == label-1).sum().item()
-
-                acc = correct/(test_loader.__len__()*8) * 100
-                sum_writer.add_scalar(tag='acc',
-                                scalar_value=acc,
-                                global_step=total_step
-                            )
-                torch.save(model.state_dict(), "./ckpt/{}_{}.pt".format(tag, total_step))
-
-
-    torch.save(model.state_dict(), "./ckpt/{}_{}.pt".format(tag, total_step))
-                            
-
-def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_decay=0, lr_decay_step=5000, lr_lower_bound=5e-7, step=0, vis=None):
-    # 评估相关
-    pool = torch.nn.AvgPool2d(9,9)
-    mask_rgb_values = [[255,242,0],[34,177,76],[255,0,88]]
-    spec_id = [9,11,14]
-    mask_list = []
-    tensor_list = []
-    label_list = []
-    for id in spec_id:
-        img = spectral.envi.open("E:\\d盘备份\\可见光部分\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr".format(id))
-
-        # 根据模型使用波段选择
-        # img_data = torch.Tensor(img.asarray()/6000)[:,:,:-4]
-        img_data = torch.Tensor(img.asarray()/6000)[:,:,:]
-        # img_data = pool(img_data.permute(1,2,0)).permute(2,0,1)
-        mask = np.array(Image.open("E:\\d盘备份\\可见光部分\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr_mask.png".format(id)))
-        mask_list.append(mask)
-        gt_TFe = ast.literal_eval(img.metadata['gt_TFe'])
-        label_list.append(gt_TFe)
-
-        with torch.no_grad():
-            img_data = pool(img_data.permute(2,0,1)).permute(1,2,0)
-            tensor_list.append(img_data)
-
-
+def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", pretrain_step=0, lr_decay=0, lr_decay_step=5000, lr_lower_bound=5e-7, step=0, test_data=None, vis=None):
     # 训练相关
     sum_writer = SummaryWriter("./runs/{}".format(tag))
     optimizer = AdamW(model.parameters(),
@@ -144,9 +60,12 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
 
     for epoch in range(epoch):
         for _, (data, gt) in enumerate(train_loader, 0):
+            if total_step == pretrain_step:
+                model.decoder1.pretrain_off()   # 结束预训练
+
             total_step+=1
             avg_label = torch.Tensor([
-                torch.Tensor(gt['gt_TFe']).mean()
+                torch.Tensor(gt)
             ]).to(device)
 
 
@@ -184,47 +103,32 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", lr_
                 if vis != None:
                     vis(sum_writer, total_step)
 
-            if total_step % 500 == 0:
+            if total_step % 1000 == 0:
                 # 测试样本绝对误差
                 model.eval()
                 err = 0
                 err_count = 0
 
-                for idx in range(tensor_list.__len__()):
+                for d in test_data:
+                    data = d['tensor']
+                    gt = d['gt']
                     with torch.no_grad():
-                        row,col,_ = tensor_list[idx].shape
-                        heat_map = []
-
-                        for i in range(row):
-                            heat_map.append(model(tensor_list[idx][i].to(device)).squeeze(1).unsqueeze(0).to("cpu"))   # 只评估Tfe
+                        len = data.shape[0]
+                        cur = 0
+                        pixelwise_prediction = []
+                        while cur + 100 <= len:
+                            pixelwise_prediction.append(model(data[cur:cur+100]).to("cpu"))
+                            cur += 100
                             torch.cuda.empty_cache()
-                            if (i+1)%50 == 0:
-                                print("\r已生成{}行结果".format(i+1), end="")
-                        
-                        print("")
 
-                    heat_map = torch.cat(heat_map, dim=0)
+                        if cur != len:
+                            pixelwise_prediction.append(model(data[cur:len]).to("cpu"))
 
-                    predict_sum = torch.Tensor([0.,0.,0.])
-                    pixel_count = torch.Tensor([0, 0, 0])
-                    gt = torch.Tensor(label_list[idx])
-
-                    values = [[],[],[]] # 分析数据分布
-
-                    for r in range(row):
-                        for c in range(col):
-                            for i in range(3):
-                                if mask_list[idx][r*9+4,c*9+4][:-1].tolist() == mask_rgb_values[i]:
-                                    predict_sum[i] += heat_map[r,c] 
-                                    values[i].append(heat_map[r,c])    # 分析数据分布
-                                    pixel_count[i] += 1
-
-                    prediction = predict_sum / pixel_count * 100
-
-                    err_list = torch.sqrt((prediction-gt)**2).tolist()
-                    for e in err_list:
-                        err += e
-                        err_count += 1
+                        pixelwise_prediction = torch.cat(pixelwise_prediction, dim=0)
+                    prediction = pixelwise_prediction.mean()*100
+                    err += torch.abs(gt - prediction)
+                    err_count += 1
+                    print("测试样本")
 
 
                 avg_err = err/(err_count)
