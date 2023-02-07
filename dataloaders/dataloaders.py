@@ -46,11 +46,14 @@ class dataset_iron_balanced_mixed(Dataset):
             self.label_list.append(label)
 
         freq /= freq.sum()
-        freq = (torch.sqrt(freq / 0.001) + 1) * 0.001 / freq
+        # freq = (torch.sqrt(freq / 0.001) + 1) * 0.001 / freq
         self.freq = freq[interval_list] # 采样概率权重
 
         if balance == False:
             self.freq /= self.freq
+        else:
+            self.freq = 1 / self.freq
+
         self.samplepoint = samplepoint
         self.training_list = torch.multinomial(self.freq, self.len, replacement=True)
     def __getitem__(self, index):

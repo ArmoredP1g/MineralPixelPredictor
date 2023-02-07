@@ -62,10 +62,55 @@ class Spec_Encoder_Linear(nn.Module):
         return torch.relu(x)
 
 
+class Spec_Encoder_Linear_Raw(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.down_sampling_0 = nn.Conv2d(768,512,1,1,bias=True)
+        self.down_sampling_1 = nn.Conv2d(512,384,1,1,bias=True)
+        self.down_sampling_2 = nn.Conv2d(384,256,1,1,bias=True)
+
+        self.soft = nn.Softmax(dim=2)
+        self.weight_mask = nn.Parameter(torch.ones(16,1,19,19,1)/1e6)   # multiplied with: head(16), batch, row, col, dim
+
+    def forward(self, x):
+        x = pad(x, (2,2), "constant", 0)    # [batch, 304]
+
+        DI = x.unsqueeze(1)-x.unsqueeze(2)  # [batch, 304, 304]
+        NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
+        RI = x.unsqueeze(1)/(x.unsqueeze(2)+x.unsqueeze(1)+1e-5)      # The division operation results in 
+                                                                      # a wide range of RI values, +self in the denominator to 
+                                                                      # stabilizes the model performance
+
+        x = torch.cat([DI.unsqueeze(3), NDI.unsqueeze(3), RI.unsqueeze(3)], dim=3)
+        del DI, NDI, RI
+        b,r,c,d = x.shape
+
+        # tensor split
+        new_tensor = []
+        for row in range(16):
+            for col in range(16):
+                new_tensor.append(x[:,row*19:(row+1)*19,col*19:(col+1)*19,:])
+
+        x = torch.cat(new_tensor, dim=3)
+
+        # branch A
+        x = torch.relu(self.down_sampling_0(x.permute(0,3,1,2)))
+        x = torch.relu(self.down_sampling_1(x))
+        x = torch.relu(self.down_sampling_2(x))
+        x = x.permute(0,2,3,1)  # [b, 19, 19, 256]
+
+
+        x = torch.cat(list(x.unsqueeze(0).split(16,4)), dim=0)     # [16, b, 19, 19, 16]
+        x = x*self.soft(self.weight_mask.reshape(16,1,19*19,1)).reshape(16,1,19,19,1)  # [16, b, 19, 19, 16]
+        x = x.sum(dim=(2,3))   # [16,b,16]
+        x = x.transpose(0,1).reshape(b,256) # [batch, 256]
+        return torch.relu(x)
+
+
 class Spec_Decoder(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.dropout = nn.Dropout(p=0.2)
+        self.pretrain_mode = False
         self.ln1 = nn.LayerNorm(128)
         self.ln2 = nn.LayerNorm(96)
         self.ln3 = nn.LayerNorm(64)
@@ -82,16 +127,23 @@ class Spec_Decoder(nn.Module):
         x = torch.relu(self.fc2(x))
         x = self.ln3(x)
 
-        return torch.clamp(self.fc_out(x), max=1, min=0)
+        if self.pretrain_mode:
+            return (torch.tanh(self.fc_out(x)) + 1)*0.5
+        else:
+            return torch.clamp(self.fc_out(x), max=1, min=0)
 
+    def pretrain_on(self):
+        self.pretrain_mode = True
 
+    def pretrain_off(self):
+        self.pretrain_mode = False
 
 class Grade_regressor(nn.Module):
     def __init__(self):
         super().__init__()
         self.encoder = Spec_Encoder_Linear()
         self.decoder1 = Spec_Decoder()
-        # self.decoder2 = Spec_Decoder()
+        # self.decoder2 = Spec_Decoder()s
         # self.decoder3 = Spec_Decoder()
         # self.decoder4 = Spec_Decoder()
         # self.decoder5 = Spec_Decoder()
@@ -107,7 +159,6 @@ class Grade_regressor(nn.Module):
         ], dim=1)
 
         return x
-    
     
     # def weight_init(self):
     #     for m in self.modules():
