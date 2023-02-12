@@ -52,7 +52,7 @@ class dataset_iron_balanced_mixed(Dataset):
         if balance == False:
             self.freq /= self.freq
         else:
-            self.freq = 1 / self.freq
+            self.freq = (1 / self.freq**balance)
 
         self.samplepoint = samplepoint
         self.training_list = torch.multinomial(self.freq, self.len, replacement=True)

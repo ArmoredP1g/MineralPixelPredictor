@@ -57,6 +57,7 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", pre
 
     loss_sum = 0
     MSE_loss_sum = 0
+    transboundary_loss_sum = 0
 
     for epoch in range(epoch):
         for _, (data, gt) in enumerate(train_loader, 0):
@@ -70,16 +71,17 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", pre
 
 
             optimizer.zero_grad() 
-            output = model(data.to(device).squeeze(0))[:,0].unsqueeze(1)  # [450, tasks]
+            output, transboundary_loss = model(data.to(device).squeeze(0))  # [450, tasks]
             # MSE_loss = mse_loss(torch.log(output+1e-6).mean(dim=0),torch.log(avg_label))
             MSE_loss = mse_loss(output.mean(dim=0),avg_label)
 
-            loss = MSE_loss
+            loss = MSE_loss + transboundary_loss**2
             loss.backward()
             optimizer.step()
             # print(total_step)
             loss_sum += loss
             MSE_loss_sum += MSE_loss
+            transboundary_loss_sum += transboundary_loss
 
             if total_step%50 == 0:
                 print("step:{}  loss:{}".format(total_step,loss))
@@ -93,10 +95,14 @@ def train_regression_mix(train_loader, model, epoch, lr=0.001, tag="unamed", pre
                                         scalar_value=MSE_loss_sum / 200,
                                         global_step=total_step
                                     )
-
+                sum_writer.add_scalar(tag='TransBoundary_loss',
+                                        scalar_value=transboundary_loss_sum / 200,
+                                        global_step=total_step
+                                    )
 
                 loss_sum = 0
                 MSE_loss_sum = 0
+                transboundary_loss_sum = 0
 
             # 可视化内容
             if total_step%500 == 0:

@@ -73,17 +73,16 @@ if __name__ == "__main__":
 
 
     train_set = dataset_iron_balanced_mixed("E:\\d盘备份\\近红外部分\\spectral_data_IR_winsize3.csv",
-            "E:\\d盘备份\\近红外部分\\spectral_data_IR_winsize3.hdf5", 100000, train_list, 96, balance=True)
+            "E:\\d盘备份\\近红外部分\\spectral_data_IR_winsize3.hdf5", 100000, train_list, 96, balance=1)
 
     train_loader = DataLoader(train_set, shuffle=True, batch_size=1, num_workers=7, drop_last=True)
     # test_loader = DataLoader(test_set, shuffle=True, batch_size=1, num_workers=0, drop_last=True)
     
     model = Grade_regressor().to(device)
-    model.decoder1.pretrain_on()
     # model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/(1预训练)精选 MSE 混合 lr8e-7 b250 dropout0.2_2000.pt"))
-#     model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/(NIR)RELU+ALLINDEX_LINEAR_1500.pt")) 
+    model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/NIR_30T_raw_unblanced_41000.pt")) 
     # model.weight_init() 
-    train_regression_mix(train_loader, model, 1000000, lr=1e-6, tag="NIR_30T_raw_修改平衡采样概率", pretrain_step=2500, lr_decay=0.93, lr_decay_step=1000, lr_lower_bound=1e-8, step=0, test_data=test_data, vis=model.visualization)
+    train_regression_mix(train_loader, model, 1000000, lr=1e-6, tag="NIR_30T_raw_O1.5blanced", pretrain_step=-1, lr_decay=0.93, lr_decay_step=1000, lr_lower_bound=1e-8, step=1, test_data=test_data, vis=model.visualization)
 
 
 

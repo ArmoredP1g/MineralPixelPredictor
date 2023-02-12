@@ -164,17 +164,13 @@ class Spec_Decoder(nn.Module):
         x = self.ln2(x)
         x = torch.relu(self.fc2(x))
         x = self.ln3(x)
-
-        if self.pretrain_mode:
-            return (torch.tanh(self.fc_out(x)) + 1)*0.5
+        x = self.fc_out(x)
+        result = torch.clamp(x, max=1, min=0)
+        if self.training:
+            transboundary_loss = ((x>1)*(x-1) + (x<0)*(-x)).mean()
+            return result, transboundary_loss
         else:
-            return torch.clamp(self.fc_out(x), max=1, min=0)
-
-    def pretrain_on(self):
-        self.pretrain_mode = True
-
-    def pretrain_off(self):
-        self.pretrain_mode = False
+            return result
 
 class Grade_regressor(nn.Module):
     def __init__(self):
@@ -188,15 +184,13 @@ class Grade_regressor(nn.Module):
 
     def forward(self, x):
         x = self.encoder(x)
-        x = torch.cat([
-            self.decoder1(x)
-            # self.decoder2(x),
-            # self.decoder3(x),
-            # self.decoder4(x),
-            # self.decoder5(x),
-        ], dim=1)
 
-        return x
+        if self.training:
+            result, transboundary_loss = self.decoder1(x)
+            return result, transboundary_loss
+        else:
+            result = self.decoder1(x)
+            return result
     
     # def weight_init(self):
     #     for m in self.modules():
