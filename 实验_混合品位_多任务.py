@@ -7,11 +7,11 @@ import spectral
 from spectral import imshow
 from PIL import Image
 spectral.settings.envi_support_nonlowercase_params = True
-from dataloaders.dataloaders import dataset_iron_balanced_mixed
+from dataloaders.dataloaders import dataset_multi_labels
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data  import random_split
-from trainer import train_regression
+from trainer import train_regression_multitask
 from configs.training_cfg import device
 import torch
 
@@ -54,7 +54,9 @@ if __name__ == "__main__":
         imgid, sampleid = id.split('_')
         sampleid = ord(sampleid) - 65
         img_data = spectral.envi.open(dataset_path+"\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr".format(imgid))
-        gt = ast.literal_eval(img_data.metadata['gt_TFe'])
+        gt_TFe = ast.literal_eval(img_data.metadata['gt_TFe'])
+        gt_Fe3 = ast.literal_eval(img_data.metadata['gt_Fe3_plus'])
+        gt_SiO2 = ast.literal_eval(img_data.metadata['gt_SiO2'])
         img_data = torch.Tensor(img_data.asarray()/6000)[:,:,:]
         img_data = pool(img_data.permute(2,0,1)).permute(1,2,0)
         mask = np.array(Image.open(dataset_path+"\\spectral_data\\{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr_mask.png".format(imgid)))
@@ -67,17 +69,28 @@ if __name__ == "__main__":
         pixel_list = torch.cat(pixel_list, dim=0)
         test_data.append({
             "tensor": pixel_list.to(device),
-            "gt": torch.Tensor([gt[sampleid]]).to(device)
+            "gt": torch.Tensor([gt_TFe[sampleid], gt_Fe3[sampleid], gt_SiO2[sampleid]]).to(device)
         })
 
 
-
-    train_set = dataset_iron_balanced_mixed("E:\\d盘备份\\近红外部分\\spectral_data_IR_winsize3.csv",
-            "E:\\d盘备份\\近红外部分\\spectral_data_IR_winsize3.hdf5", 150000, train_list, 96, balance=True)
+    train_set = dataset_multi_labels("E:\\d盘备份\\近红外部分\\spectral_data_IR_winsize3.csv",
+            "E:\\d盘备份\\近红外部分\\spectral_data_IR_winsize3.hdf5", 100000, train_list, 96)
 
     train_loader = DataLoader(train_set, shuffle=True, batch_size=1, num_workers=7, drop_last=True)
     # test_loader = DataLoader(test_set, shuffle=True, batch_size=1, num_workers=0, drop_last=True)
-    
-    model = Grade_regressor(encoder='TSI').to(device)
-    # model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/(TSI)SiO2_0.93_unbalanced_88000.pt"))
-    train_regression(train_loader, model, 1, lr=1e-6, tag="(TSI)TFe_NRI", pretrain_step=-1, lr_decay=0.93, lr_decay_step=1000, lr_lower_bound=1e-8, step=1, test_data=test_data, vis=model.visualization)
+    model = Grade_regressor(encoder='TSI',tasks=3).to(device)
+    # model.weight_init() 
+    train_regression_multitask(train_loader, model, 1, lr=1e-6, tag="(NIR-TSI)Mutitask0.93", pretrain_step=-1, lr_decay=0.93, lr_decay_step=1000, lr_lower_bound=1e-8, step=0, test_data=test_data, vis=model.visualization)
+
+    # train_set = dataset_multi_labels("E:\\d盘备份\\近红外部分\\spectral_data_IR_winsize3.csv",
+    #         "E:\\d盘备份\\近红外部分\\spectral_data_IR_winsize3.hdf5", 100000, train_list, 96)
+
+    # train_loader = DataLoader(train_set, shuffle=True, batch_size=1, num_workers=7, drop_last=True)
+    # # test_loader = DataLoader(test_set, shuffle=True, batch_size=1, num_workers=0, drop_last=True)
+    # model = Grade_regressor(encoder='ASI',tasks=3).to(device)
+    # model.load_state_dict(torch.load("D:/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt/(NIR-ASI)Mutitask0.98_100000.pt")) 
+    # # model.weight_init() 
+    # train_regression_multitask(train_loader, model, 1, lr=1e-6*0.98**100, tag="(NIR-ASI)Mutitask0.98", pretrain_step=-1, lr_decay=0.98, lr_decay_step=1000, lr_lower_bound=1e-8, step=100001, test_data=test_data, vis=model.visualization)
+
+
+

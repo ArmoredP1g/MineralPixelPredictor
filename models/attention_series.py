@@ -26,8 +26,8 @@ class MSI_Encoder(nn.Module):
 
     def forward(self, x):
         b,_ = x.shape
-        DI = x.unsqueeze(1)-x.unsqueeze(2) 
-        NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
+        DI = x.unsqueeze(1)-x.unsqueeze(2)*0
+        NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)*0
         RI = x.unsqueeze(1)/(x.unsqueeze(2)+x.unsqueeze(1)+1e-5)      # The division operation results in 
                                                                       # a wide range of RI values, +self in the denominator to 
                                                                       # stabilizes the model performance

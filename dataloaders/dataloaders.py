@@ -37,7 +37,7 @@ class dataset_iron_balanced_mixed(Dataset):
         # 统计标签出现在各个区间段上的频率
         freq = torch.Tensor([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
         for id in self.sample_list:
-            label = float(self.df[self.df['sample_id']==id].sample()['gt_SiO2']) 
+            label = float(self.df[self.df['sample_id']==id].sample()['gt_TFe']) 
             for i in range(20):
                 if i*5 < label <= (i+1)*5:
                     freq[i] += 1
