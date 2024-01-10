@@ -1,1 +1,11 @@
 device = "cuda"
+dataset_path = "/mnt/d/IR_DATA"
+ckpt_path = "/mnt/d/source/repos/Pixel-wise-hyperspectral-feature-classification-experiment/ckpt"
+step_per_fold = 200
+batch_size = 96
+learning_rate = 1e-6
+lr_decay=0.93
+lr_decay_step=1000
+lr_lower_bound=1e-8
+num_workers=2
+session_tag = "dddd"
