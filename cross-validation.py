@@ -1,5 +1,5 @@
 from unicodedata import name
-from models.attention_series import Grade_regressor
+from models.models import Conv_Diff
 import json
 import h5py
 import ast
@@ -52,24 +52,24 @@ if __name__ == "__main__":
                 '9_C','43_A','53_A','3_B','30_C','27_A','22_B','27_C','31_C',
                 '53_B','32_A','6_B','52_B','8_B','41_B','31_A','34_A',
                 '7_B','53_C','54_C','29_B','16_B','47_A','49_B','10_C',
-                '21_C','31_B','50_A','18_A','22_C','52_C','38_A','17_A',
+                '21_C','50_A','18_A','22_C','52_C','38_A','17_A',
                 '59_A','4_A','57_B','33_C','7_A','49_C','58_B','4_C',
                 '52_A','17_C','23_A','7_C','46_B','30_B','46_A','18_C',
                 '24_A','55_A','40_A','55_B','6_A','59_B','3_C','27_B',
                 '18_B','5_A','29_A','25_B','49_A','32_C','45_C','12_B',
                 '20_A','9_A','28_C','29_C','5_C','46_C','14_C','19_A',
                 '23_B','9_B','40_B','35_C','13_C','50_B','35_B','15_B',
-                '44_C','45_A','23_C','1_C','1_B','35_A','32_B','6_C',
+                '45_A','23_C','1_C','1_B','35_A','32_B','6_C',
                 '51_B','28_B','2_B','58_C','38_C','2_A','26_B','2_C',
                 '16_C','43_B','24_C','54_B','15_C','42_C','36_A','37_A',
-                '41_C','44_B','19_C','51_C','1_A','39_B','28_A','58_A',
+                '41_C','44_B','19_C','51_C','1_A','39_B','28_A',
                 '39_C','30_A','39_A','54_A','61_C','61_A','37_B','48_C',
                 '21_A','22_A','48_B','48_A'] + \
                 ['14_A',
-                '11_C','16_A','13_B','21_B','36_C','31_A','34_B','56_A',
+                '11_C','16_A','13_B','21_B','36_C','34_B','56_A',
                 '47_C','8_A','19_B','3_A','62_A','33_B','10_A','24_B','60_B',
-                '11_B','59_C','10_B','60_C','45_B','8_C','41_A','38_B',
-                '57_C','50_C','61_B','37_C']
+                '11_B','59_C','10_B','8_C','41_A','38_B',
+                '57_C','61_B','37_C']
 
     data = []
     for id in all_samples:
@@ -98,7 +98,6 @@ if __name__ == "__main__":
         with open(ckpt_path+"/cfg.json", "r") as file:
             cfg_data = json.load(file)
         
-                
         # loading ckpt model
         items = os.listdir(ckpt_path)
         fold = 0    # 如果没pt文件，就都是0
@@ -110,13 +109,13 @@ if __name__ == "__main__":
             if os.path.isfile(item_path) and item.endswith(".pt"):
                 model_name = item
                 # 从model名获得fold与step
-                base_name = os.path.splitext(file_name)[0]
+                base_name = os.path.splitext(model_name)[0]
                 parts = base_name.split("_")
-                if int(parts[0][4:]) > fold:
+                if int(parts[0][4:]) >= fold:
                     fold = int(parts[0][4:])  # 从索引4开始提取 fold 数
                     step = int(parts[1][4:])  # 从索引4开始提取 step 数
         # 开训
-        model = Grade_regressor(encoder='TSI').to(device)
+        model = Conv_Diff().to(device)
         for i in range(fold, 5):
             if i == fold and step != 0:
                 model.load_state_dict(torch.load(ckpt_path+"/fold{}_step{}.pt".format(fold, step)))
@@ -137,13 +136,13 @@ if __name__ == "__main__":
             trainloader = DataLoader(trainset, shuffle=True, batch_size=1, num_workers=num_workers, drop_last=True)
 
             train_regression(trainloader, model, i, 
-                            lr=cfg_data["learning_rate"], 
+                            lr=cfg_data["learning_rate"] * cfg_data["lr_decay"]**(step//cfg_data["lr_decay_step"]), 
                             tag=cfg_data["session_tag"]+"_fold{}".format(i), 
                             pretrain_step=-1, 
                             lr_decay=cfg_data["lr_decay"], 
                             lr_decay_step=cfg_data["lr_decay_step"], 
                             lr_lower_bound=cfg_data["lr_lower_bound"], 
-                            step=step+1, test_data=test_data(test_list), vis=model.visualization)
+                            step=step+1, test_data=test_data(test_list))
         
     else:
         # a new training session
@@ -161,7 +160,7 @@ if __name__ == "__main__":
         with open(ckpt_path+"/cfg.json", "w") as file:
             json.dump(cfg, file)    # saving traing config
         # 开训
-        model = Grade_regressor(encoder='TSI').to(device)
+        model = Conv_Diff().to(device)
         for i in range(5):
             training_list = []
             test_list = []
@@ -185,7 +184,7 @@ if __name__ == "__main__":
                             lr_decay=lr_decay, 
                             lr_decay_step=lr_decay_step, 
                             lr_lower_bound=lr_lower_bound, 
-                            step=1, test_data=test_data(test_list), vis=model.visualization)
+                            step=1, test_data=test_data(test_list))
     
 
 
