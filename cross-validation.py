@@ -1,5 +1,5 @@
 from unicodedata import name
-from models.models import Conv_Diff
+from models.models import ConvPredictor, VisModel2
 import json
 import h5py
 import ast
@@ -115,7 +115,8 @@ if __name__ == "__main__":
                     fold = int(parts[0][4:])  # 从索引4开始提取 fold 数
                     step = int(parts[1][4:])  # 从索引4开始提取 step 数
         # 开训
-        model = Conv_Diff().to(device)
+        # model = ConvPredictor().to(device)
+        model = VisModel2().to(device)
         for i in range(fold, 5):
             if i == fold and step != 0:
                 model.load_state_dict(torch.load(ckpt_path+"/fold{}_step{}.pt".format(fold, step)))
@@ -160,7 +161,8 @@ if __name__ == "__main__":
         with open(ckpt_path+"/cfg.json", "w") as file:
             json.dump(cfg, file)    # saving traing config
         # 开训
-        model = Conv_Diff().to(device)
+        # model = ConvPredictor().to(device)
+        model = VisModel2().to(device)
         for i in range(5):
             training_list = []
             test_list = []

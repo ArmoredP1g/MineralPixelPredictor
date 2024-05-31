@@ -68,6 +68,9 @@ def train_regression(train_loader, model, fold, lr=0.001, tag="unamed", pretrain
     transboundary_loss_sum = 0
 
     for _, (data, gt) in enumerate(train_loader, 0):
+        if total_step > step_per_fold:
+            break
+
         if total_step == pretrain_step:
             model.decoder1.pretrain_off()   # 结束预训练
 
@@ -149,7 +152,7 @@ def train_regression(train_loader, model, fold, lr=0.001, tag="unamed", pretrain
                 err_count += 1
                 gt_avg += gt
                 gt_all.append(gt)
-                print("测试样本")
+                # print("测试样本")
 
 
             avg_err = err/(err_count)
@@ -164,6 +167,25 @@ def train_regression(train_loader, model, fold, lr=0.001, tag="unamed", pretrain
 
             rmse = torch.sqrt(err_square/err_count)
             nrmse = rmse/(max(gt_all)-min(gt_all))
+
+
+            # 追加： 平均光谱的指标
+            avg_prediction = []
+            gt2 = []
+            for d in test_data:
+                data = d['tensor'].mean(dim=0).unsqueeze(0)
+                gt = d['gt']
+                with torch.no_grad():
+                    avg_prediction.append(model(data).to("cpu")*100)
+                    gt2.append(gt.detach().cpu().numpy())
+                
+
+
+            avg_prediction = torch.cat(avg_prediction, dim=0).detach().cpu().numpy()
+            gt2 = np.array(gt2)
+            rmse2 = np.sqrt(np.mean((avg_prediction - gt2)**2))
+            nrmse2 = np.sqrt(np.mean((avg_prediction - gt2)**2)) / (np.max(gt2) - np.min(gt2))
+            r22 = 1 - np.sum((avg_prediction - gt2)**2) / np.sum((gt2 - np.mean(gt2))**2)
 
             sum_writer.add_scalar(tag='MAE',
                             scalar_value=avg_err,
@@ -186,6 +208,19 @@ def train_regression(train_loader, model, fold, lr=0.001, tag="unamed", pretrain
                         )
             sum_writer.add_scalar(tag='R2',
                             scalar_value=R2,
+                            global_step=total_step
+                        )
+            sum_writer.add_scalar(tag='RMSE_AVGSPEC',
+                            scalar_value=rmse2,
+                            global_step=total_step
+                        )
+            
+            sum_writer.add_scalar(tag='NRMSE_AVGSPEC',
+                            scalar_value=nrmse2,
+                            global_step=total_step
+                        )
+            sum_writer.add_scalar(tag='R2_AVGSPEC',
+                            scalar_value=r22,
                             global_step=total_step
                         )
             

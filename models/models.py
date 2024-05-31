@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 from torch.nn.functional import pad
-from torch.nn.functional import leaky_relu
+from scipy.signal import savgol_filter
 import numpy as np
 # from models.ProbSparse_Self_Attention import ProbSparse_Self_Attention_Block, Self_Attention_Decoder
 # from models.PositionEmbedding import positionalencoding1d
@@ -81,61 +81,37 @@ class GradCAM:
         cam = cam / cam.max()
 
         return cam, float(output)
+    
 
-
-class Conv_Raw(nn.Module):
-    def __init__(self) -> None:
+class MultiScale_Conv(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size) -> None:
         super().__init__()
-        self.pool = nn.AvgPool1d(2,2)
-        self.conv_layer1_s5 = nn.Conv1d(1,10,5,1,bias=True, padding=2, padding_mode='reflect')
-        self.conv_layer1_s9 = nn.Conv1d(1,10,9,1,bias=True, padding=4, padding_mode='reflect')
-        self.conv_layer1_s13 = nn.Conv1d(1,10,13,1,bias=True, padding=6, padding_mode='reflect')
-
-        self.conv_layer2_s5 = nn.Conv1d(30,20,5,1,bias=True, padding=2, padding_mode='reflect')
-        self.conv_layer3_s5 = nn.Conv1d(20,10,5,1,bias=True, padding=2, padding_mode='reflect')
-        self.conv_layer4_s5 = nn.Conv1d(10,1,5,1,bias=True, padding=2, padding_mode='reflect')
-
-        # layer_norm
-        self.ln1 = nn.LayerNorm(10)
-        
-
-        self.output_layer = nn.Linear(21,1)
+        chn_left = out_channels
+        chn_per = out_channels//4
+        self.conv2 = nn.Conv1d(in_channels,chn_per,kernel_size+4,1,bias=True, padding=((kernel_size+4)//2), padding_mode='reflect')
+        chn_left -= chn_per
+        self.conv3 = nn.Conv1d(in_channels,chn_per,kernel_size+8,1,bias=True, padding=((kernel_size+8)//2), padding_mode='reflect')
+        chn_left -= chn_per
+        self.conv4 = nn.Conv1d(in_channels,chn_per,kernel_size+12,1,bias=True, padding=((kernel_size+12)//2), padding_mode='reflect')
+        chn_left -= chn_per
+        self.conv1 = nn.Conv1d(in_channels,chn_left,kernel_size,1,bias=True, padding=(kernel_size//2), padding_mode='reflect')
 
     def forward(self, x):
-        if norm_type == 'z_score':
-            x = z_score_normalization(x)
-        elif norm_type == 'min_max':
-            x = min_max_normalization(x)
-        x1 = torch.relu(self.conv_layer1_s5(x))
-        x2 = torch.relu(self.conv_layer1_s9(x))
-        x3 = torch.relu(self.conv_layer1_s13(x))
-        x = torch.cat([x1,x2,x3], dim=1)    # [batch, 30, 168]
-        x = torch.relu(self.conv_layer2_s5(x))
-        x = self.pool(x)                    # [batch, 20, 84]
-        x = torch.relu(self.conv_layer3_s5(x))
-        x = self.pool(x)                    # [batch, 10, 42]
-        x = torch.relu(self.conv_layer4_s5(x))
-        x = self.pool(x)                    # [batch, 1, 21]
-        x = x.squeeze(1)
-        x = self.output_layer(x)
-        result = torch.clamp(x, max=1, min=0)
-        if self.training:
-            transboundary_loss = ((x>1)*(x-1) + (x<0)*(-x)).mean()
-            return result, transboundary_loss
-        else:
-            return result
-    
-class Conv_Diff(nn.Module):
+        x1 = self.conv1(x)
+        x2 = self.conv2(x)
+        x3 = self.conv3(x)
+        x4 = self.conv4(x)
+        return torch.cat([x1,x2,x3,x4], dim=1)
+
+
+class ConvPredictor(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.pool = nn.AvgPool1d(2,2)
-        self.conv_layer1_s5 = nn.Conv1d(3,10,5,1,bias=True, padding=2, padding_mode='reflect')
-        self.conv_layer1_s9 = nn.Conv1d(3,10,9,1,bias=True, padding=4, padding_mode='reflect')
-        self.conv_layer1_s13 = nn.Conv1d(3,10,13,1,bias=True, padding=6, padding_mode='reflect')
-
-        self.conv_layer2_s5 = nn.Conv1d(30,20,5,1,bias=True, padding=2, padding_mode='reflect')
-        self.conv_layer3_s5 = nn.Conv1d(20,10,5,1,bias=True, padding=2, padding_mode='reflect')
-        self.conv_layer4_s5 = nn.Conv1d(10,3,5,1,bias=True, padding=2, padding_mode='reflect')
+        self.conv_layer1 = MultiScale_Conv(3,30,5)
+        self.conv_layer2 = nn.Conv1d(30,20,3,1,bias=True, padding=1, padding_mode='reflect')
+        self.conv_layer3 = nn.Conv1d(20,10,3,1,bias=True, padding=1, padding_mode='reflect')
+        self.conv_layer4 = nn.Conv1d(10,3,3,1,bias=True, padding=1, padding_mode='reflect')
 
         self.output_layer_1 = nn.Linear(63, 42)
         self.output_layer_2 = nn.Linear(42, 21)
@@ -144,34 +120,28 @@ class Conv_Diff(nn.Module):
         self.ln1 = nn.LayerNorm(168)
         self.ln2 = nn.LayerNorm(84)
         self.ln3 = nn.LayerNorm(42)
-        self.ln4 = nn.LayerNorm(21)
 
     def forward(self, x):
-
-
         # x 此时的shape为[batch, 168]
         # 我需要对x进行一阶和二阶差分操作，并将结果和x拼接在通道维度拼接起来，新的x的shape为[batch, 3, 168]
         # 注意差分后的长度要和原始的x一样是168，要在头部补0
-        x = self.ln1(x)
 
+        x = self.ln1(x)
+        # x_savgol = torch.Tensor(savgol_filter(x.detach().cpu().numpy(), 4, 2)).to(x.device)
         x_diff1 = torch.cat([torch.zeros(x.shape[0],1).to(x.device), x[:,1:]-x[:,:-1]], dim=1)
         x_diff2 = torch.cat([torch.zeros(x.shape[0],1).to(x.device), x_diff1[:,1:]-x_diff1[:,:-1]], dim=1)
-        x = torch.stack([x, x_diff1, x_diff2], dim=1)
-
-        x1 = torch.relu(self.conv_layer1_s5(x))
-        x2 = torch.relu(self.conv_layer1_s9(x))
-        x3 = torch.relu(self.conv_layer1_s13(x))
-        x = torch.cat([x1,x2,x3], dim=1)    # [batch, 30, 168]
+        # x = torch.stack([x, x_diff1, x_diff2], dim=1)
+        x = torch.stack([x, x, x_diff1], dim=1)
+        x = torch.relu(self.conv_layer1(x)) # [batch, 63, 168]
         x = self.ln1(x)
-        x = torch.relu(self.conv_layer2_s5(x))
+        x = torch.relu(self.conv_layer2(x))
         x = self.pool(x)                    # [batch, 20, 84]
         x = self.ln2(x)
-        x = torch.relu(self.conv_layer3_s5(x))
+        x = torch.relu(self.conv_layer3(x))
         x = self.pool(x)                    # [batch, 10, 42]
         x = self.ln3(x)
-        x = torch.relu(self.conv_layer4_s5(x))
+        x = torch.relu(self.conv_layer4(x)) # [batch, 3, 42]
         x = self.pool(x)                    # [batch, 3, 21]
-        x = self.ln4(x)     
         x = x.view(x.shape[0], -1)          # [batch, 63]
         x = torch.relu(self.output_layer_1(x))
         x = torch.relu(self.output_layer_2(x))
@@ -182,150 +152,102 @@ class Conv_Diff(nn.Module):
             return result, transboundary_loss
         else:
             return result
-    
 
 
-class MSI_Encoder(nn.Module):
+
+class VisModel(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.pool = nn.AvgPool2d(12,12)
+        self.pool = nn.AvgPool1d(2,2)
+        self.conv_layer1 = MultiScale_Conv(3,30,5)
+        self.conv_layer2 = nn.Conv1d(30,20,3,1,bias=True, padding=1, padding_mode='reflect')
+        self.conv_layer3 = nn.Conv1d(20,10,3,1,bias=True, padding=1, padding_mode='reflect')
+        self.conv_layer4 = nn.Conv1d(10,3,3,1,bias=True, padding=1, padding_mode='reflect')
+        self.conv_layer5 = nn.Conv1d(3,1,1,1,bias=True)
 
-        self.ln1 = nn.LayerNorm(128)
-        self.ln2 = nn.LayerNorm(96)
-        self.ln3 = nn.LayerNorm(64)
+        self.output_layer_1 = nn.Linear(21, 1)
 
-        self.FC_0 = nn.Linear(588,512)
-        self.FC_1 = nn.Linear(512,384)
-        self.FC_2 = nn.Linear(384,256)
+
+        self.ln1 = nn.LayerNorm(168)
+        self.ln2 = nn.LayerNorm(84)
+        self.ln3 = nn.LayerNorm(42)
 
     def forward(self, x):
-        b,_ = x.shape
-        DI = x.unsqueeze(1)-x.unsqueeze(2)*0
-        NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)*0
-        RI = x.unsqueeze(1)/(x.unsqueeze(2)+x.unsqueeze(1)+1e-5)      # The division operation results in 
-                                                                      # a wide range of RI values, +self in the denominator to 
-                                                                      # stabilizes the model performance
+        # x 此时的shape为[batch, 168]
+        # 我需要对x进行一阶和二阶差分操作，并将结果和x拼接在通道维度拼接起来，新的x的shape为[batch, 3, 168]
+        # 注意差分后的长度要和原始的x一样是168，要在头部补0
 
-        x = torch.cat([DI.unsqueeze(3), NDI.unsqueeze(3), RI.unsqueeze(3)], dim=3)  
-        del DI, NDI, RI
-
-        x = self.pool(x.permute(0,3,1,2)).permute(0,2,3,1).reshape(b,-1)
-
-        x = torch.relu(self.FC_0(x))
-        x = torch.relu(self.FC_1(x))
-        x = torch.relu(self.FC_2(x))
-        return x
-
-class TSI_Encoder(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.down_sampling_0 = nn.Conv2d(588,512,1,1,bias=True)
-        self.down_sampling_1 = nn.Conv2d(512,384,1,1,bias=True)
-        self.down_sampling_2 = nn.Conv2d(384,256,1,1,bias=True)
-
-        self.soft = nn.Softmax(dim=2)
-        self.weight_mask = nn.Parameter(torch.ones(16,1,12,12,1)/1e6)   # multiplied with: head(16), batch, row, col, dim
-
-    def forward(self, x):   # [b, 168]
-        # x[:,-1] = 0
-        # x_norm=((x-x.min(dim=1)[0].unsqueeze(1))/(x.max(dim=1)[0]-x.min(dim=1)[0]+1e-5).unsqueeze(1))
-        if norm_type == 'z_score':
-            x = z_score_normalization(x)
-        elif norm_type == 'min_max':
-            x = min_max_normalization(x)
-        DI = x.unsqueeze(1)-x.unsqueeze(2) 
-        NDI = (x.unsqueeze(1)-x.unsqueeze(2))/(x.unsqueeze(1)+x.unsqueeze(2)+1e-5)
-        RI = x.unsqueeze(1)/(x.unsqueeze(2)+x.unsqueeze(1)+1e-5)      # The division operation results in 
-                                                                      # a wide range of RI values, +self in the denominator to 
-                                                                      # stabilizes the model performance
-
-        x = torch.cat([DI.unsqueeze(3), NDI.unsqueeze(3), RI.unsqueeze(3)], dim=3)  
-        del DI, NDI, RI
-        b,r,c,d = x.shape
-
-        # tensor split
-        new_tensor = []
-        for row in range(14):
-            for col in range(14):
-                new_tensor.append(x[:,row*12:(row+1)*12,col*12:(col+1)*12,:])
-
-        x = torch.cat(new_tensor, dim=3) # [batch, 12, 12, 784]
-
-        # branch A
-        x = torch.relu(self.down_sampling_0(x.permute(0,3,1,2)))
-        x = torch.relu(self.down_sampling_1(x))
-        x = torch.relu(self.down_sampling_2(x))
-        x = x.permute(0,2,3,1)  # [b, 12, 12, 256]
-
-
-        x = torch.cat(list(x.unsqueeze(0).split(16,4)), dim=0)     # [16, b, 12, 12, 16]
-        x = x*self.soft(self.weight_mask.reshape(16,1,12*12,1)).reshape(16,1,12,12,1)  # [16, b, 12, 12, 16]
-        x = x.sum(dim=(2,3))   # [16,b,16]
-        x = x.transpose(0,1).reshape(b,256) # [batch, 256]
-        return torch.relu(x)
-
-class Spec_Decoder(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.pretrain_mode = False
-        self.ln1 = nn.LayerNorm(128)
-        self.ln2 = nn.LayerNorm(96)
-        self.ln3 = nn.LayerNorm(64)
-        self.fc0 = nn.Linear(256,128)
-        self.fc1 = nn.Linear(128,96)
-        self.fc2 = nn.Linear(96,64)
-        self.fc_out = nn.Linear(64,1)
-
-    def forward(self, x):
-        x = torch.relu(self.fc0(x))
         x = self.ln1(x)
-        x = torch.relu(self.fc1(x))
+        # x_savgol = torch.Tensor(savgol_filter(x.detach().cpu().numpy(), 4, 2)).to(x.device)
+        x_diff1 = torch.cat([torch.zeros(x.shape[0],1).to(x.device), x[:,1:]-x[:,:-1]], dim=1)
+        x_diff2 = torch.cat([torch.zeros(x.shape[0],1).to(x.device), x_diff1[:,1:]-x_diff1[:,:-1]], dim=1)
+        # x = torch.stack([x, x_diff1, x_diff2], dim=1)
+        x = torch.stack([x, x, x_diff1], dim=1)
+        x = torch.relu(self.conv_layer1(x)) # [batch, 63, 168]
+        x = self.ln1(x)
+        x = torch.relu(self.conv_layer2(x))
+        x = self.pool(x)                    # [batch, 20, 84]
         x = self.ln2(x)
-        x = torch.relu(self.fc2(x))
+        x = torch.relu(self.conv_layer3(x))
+        x = self.pool(x)                    # [batch, 10, 42]
         x = self.ln3(x)
-        x = self.fc_out(x)
+        x = torch.relu(self.conv_layer4(x)) # [batch, 3, 42]
+        x = self.pool(x)                    # [batch, 3, 21]
+        x = torch.relu(self.conv_layer5(x)) # [batch, 1, 21]
+        x = x.view(x.shape[0], -1)          # [batch, 63]
+        x = self.output_layer_1(x)
         result = torch.clamp(x, max=1, min=0)
         if self.training:
             transboundary_loss = ((x>1)*(x-1) + (x<0)*(-x)).mean()
             return result, transboundary_loss
         else:
             return result
+    
 
-class Grade_regressor(nn.Module):
-    def __init__(self, encoder='TSI', tasks=1):
+
+class VisModel2(nn.Module):
+    def __init__(self) -> None:
         super().__init__()
-        self.vis_flag = (encoder=='TSI')
-        if encoder == 'TSI':
-            self.encoder = TSI_Encoder()
-        else:
-            self.encoder = MSI_Encoder()
-        self.decoders = Spec_Decoder()
-        self.decoders = nn.ModuleList([Spec_Decoder() for i in range(tasks)])
+        self.pool = nn.AvgPool1d(2,2)
+        self.conv_layer1 = MultiScale_Conv(3,50,5)
+        self.conv_layer2 = nn.Conv1d(50,40,3,1,bias=True, padding=1, padding_mode='reflect')
+        self.conv_layer3 = nn.Conv1d(40,30,3,1,bias=True, padding=1, padding_mode='reflect')
+        self.conv_layer4 = nn.Conv1d(30,1,1,1,bias=True)
+
+        self.output_layer_1 = nn.Linear(42, 1)
+
+
+        self.ln1 = nn.LayerNorm(168)
+        self.ln2 = nn.LayerNorm(84)
+        self.ln3 = nn.LayerNorm(42)
 
     def forward(self, x):
-        x = self.encoder(x)
+        # x 此时的shape为[batch, 168]
+        # 我需要对x进行一阶和二阶差分操作，并将结果和x拼接在通道维度拼接起来，新的x的shape为[batch, 3, 168]
+        # 注意差分后的长度要和原始的x一样是168，要在头部补0
 
+        x = self.ln1(x)
+        # x_savgol = torch.Tensor(savgol_filter(x.detach().cpu().numpy(), 4, 2)).to(x.device)
+        x_diff1 = torch.cat([torch.zeros(x.shape[0],1).to(x.device), x[:,1:]-x[:,:-1]], dim=1)
+        x_diff2 = torch.cat([torch.zeros(x.shape[0],1).to(x.device), x_diff1[:,1:]-x_diff1[:,:-1]], dim=1)
+        # x = torch.stack([x, x_diff1, x_diff2], dim=1)
+        x = torch.stack([x, x, x_diff1], dim=1)
+        x = torch.relu(self.conv_layer1(x))
+        x = self.ln1(x)
+        x = torch.relu(self.conv_layer2(x))
+        x = self.pool(x)                    
+        x = self.ln2(x)
+        x = torch.relu(self.conv_layer3(x))
+        x = self.pool(x)                   
+        x = self.ln3(x)
+        x = torch.relu(self.conv_layer4(x))             
+        x = x.view(x.shape[0], -1)          
+        x = self.output_layer_1(x)
+        result = torch.clamp(x, max=1, min=0)
         if self.training:
-            result = []
-            transboundary_loss = 0
-            for m in self.decoders:
-                p, loss = m(x)  # p: batch,168
-                result.append(p)
-                transboundary_loss += loss
-            return torch.cat(result, dim=1), transboundary_loss       # result: batch, 168, tasks
+            transboundary_loss = ((x>1)*(x-1) + (x<0)*(-x)).mean()
+            l1_loss = self.output_layer_1.weight.abs().mean()
+            return result, transboundary_loss+l1_loss
         else:
-            result = []
-            for m in self.decoders:
-                result.append(m(x))
-            return torch.cat(result, dim=1)
-
+            return result
     
-    def visualization(self, sum_writer, scale):
-        '''
-        朝tensorboard输出可视化内容
-        '''
-        if self.vis_flag:
-            for i in range(16):
-                axexSub_attn = sns.heatmap(torch.abs(self.encoder.weight_mask.squeeze(4).squeeze(1)).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
-                # axexSub_attn = sns.heatmap(torch.abs(self.encoder.weight_mask.squeeze(1).squeeze(1)).cpu().detach().numpy()[i], cmap="viridis", xticklabels=False, yticklabels=False)
-                sum_writer.add_figure('heatmap_attn/head{}'.format(i), axexSub_attn.figure, scale)# 得.figure转一下
