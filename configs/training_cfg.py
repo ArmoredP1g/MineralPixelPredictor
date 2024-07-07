@@ -8,5 +8,5 @@ lr_decay=0.98
 lr_decay_step=1000
 lr_lower_bound=1e-7
 num_workers=6
-# session_tag = "(0)2x_1sgdiff1"
-session_tag = "vismodel3"
+# session_tag = "(0)2x_1diff1"
+session_tag = "(0)unbalanced"
