@@ -371,34 +371,41 @@ if __name__ == "__main__":
     # 请保存图像到文件"prediction_vs_actual.pdf"
     # 请返回图像对象
 
-fig = plt.figure()
-fig = plt.figure(figsize=(20, 6))  # Adjust the figure size to make subplots square
-plt.subplot(1,3,1)
-plt.scatter(gt_all, pred_svr_pixelwise, color='blue', label='Pixelwise')
-plt.scatter(gt_all, pred_svr_avg, color='red', label='Avg')
-plt.plot([0, 100], [0, 100], 'g--')
-plt.title('SVR Prediction vs Actual')
-plt.xlabel('Ground Truth')
-plt.ylabel('Predicted Value')
-plt.legend()
+    # 设置全局字体大小
+    plt.rc('font', size=18)  # 默认字体大小
 
-plt.subplot(1,3,2)
-plt.scatter(gt_all, pred_xgb_pixelwise, color='blue', label='Pixelwise')
-plt.scatter(gt_all, pred_xgb_avg, color='red', label='Avg')
-plt.plot([0, 100], [0, 100], 'g--')
-plt.title('XGB Prediction vs Actual')
-plt.xlabel('Ground Truth')
-plt.ylabel('Predicted Value')
-plt.legend()
+    # 调整 figsize 参数以改变图形的整体大小，这里假设我们保持高度为6，宽度根据子图数量和期望的留白进行调整
+    fig = plt.figure(figsize=(18, 6))  # 减小宽度以减少左右留白
 
-plt.subplot(1,3,3)
-plt.scatter(gt_all, DL_prediction, color='blue', label='DL')
-plt.plot([0, 100], [0, 100], 'g--')
-plt.title('DL Prediction vs Actual')
-plt.xlabel('Ground Truth')
-plt.ylabel('Predicted Value')
-plt.legend()
+    plt.subplot(1,3,1)
+    plt.scatter(gt_all, pred_svr_pixelwise, color='blue', label='Pixelwise')
+    plt.scatter(gt_all, pred_svr_avg, color='red', label='Avg')
+    plt.plot([0, 100], [0, 100], 'g--')
+    plt.title('SVR Prediction vs Actual')
+    plt.xlabel('Ground Truth(%)')
+    plt.ylabel('Predicted Value(%)')
+    plt.legend()
 
-plt.savefig("prediction_vs_actual.pdf")
+    plt.subplot(1,3,2)
+    plt.scatter(gt_all, pred_xgb_pixelwise, color='blue', label='Pixelwise')
+    plt.scatter(gt_all, pred_xgb_avg, color='red', label='Avg')
+    plt.plot([0, 100], [0, 100], 'g--')
+    plt.title('XGB Prediction vs Actual')
+    plt.xlabel('Ground Truth(%)')
+    plt.ylabel('Predicted Value(%)')
+    plt.legend()
+
+    plt.subplot(1,3,3)
+    plt.scatter(gt_all, DL_prediction, color='blue', label='DL')
+    plt.plot([0, 100], [0, 100], 'g--')
+    plt.title('DL Prediction vs Actual')
+    plt.xlabel('Ground Truth(%)')
+    plt.ylabel('Predicted Value(%)')
+    plt.legend()
+
+    # 使用 plt.subplots_adjust 调整子图之间以及子图与图形边缘之间的空间
+    plt.subplots_adjust(left=0.05, right=0.95, wspace=0.2)
+
+    plt.savefig("prediction_vs_actual.pdf")
 
 
