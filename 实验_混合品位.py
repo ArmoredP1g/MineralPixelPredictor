@@ -1,5 +1,5 @@
 from unicodedata import name
-from models.attention_series import Grade_regressor
+from models.models import Grade_regressor
 import h5py
 import ast
 import numpy as np

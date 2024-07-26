@@ -1,5 +1,5 @@
 from unicodedata import name
-from models.attention_series import feature_conbined
+from models.models import feature_conbined
 from models.fc import fc_single_variable
 from dataloaders.dataloaders import dataset_xiongan
 from torch.utils.data import DataLoader
