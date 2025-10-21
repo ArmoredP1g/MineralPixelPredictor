@@ -2,15 +2,15 @@ device = "cuda"
 dataset_path = "D:\\IR_DATA"
 ckpt_path = "ckpt"
 ae_step_per_fold = 40000
-pd_step_per_fold = 200000
+pd_step_per_fold = 150000
 batch_size = 12
 learning_rate = 1e-3
 lr_decay=0.98
 lr_decay_step=1000
 lr_lower_bound=1e-8
 num_workers=6
-session_tag = "cnn_only"
-# session_tag = "(1)chi_only"
+session_tag = "final"
+
 
 
 # min_nrmse: 0.07905751279119358, r2: 0.8075416333615556, rmse: 4.292822582665238

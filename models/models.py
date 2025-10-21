@@ -3,7 +3,6 @@ import torch
 from torch.nn.functional import pad
 from scipy.signal import savgol_filter
 import numpy as np
-from efficient_kan.kan import *
 # from models.ProbSparse_Self_Attention import ProbSparse_Self_Attention_Block, Self_Attention_Decoder
 # from models.PositionEmbedding import positionalencoding1d
 from configs.training_cfg import *
@@ -125,91 +124,3 @@ class Predictor(nn.Module):
         x = self.dense3(x)                   # [batch, 1]
         return torch.sigmoid(x)
 
-class VAE_Encoder(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.pool = nn.AvgPool1d(2, 2)
-        self.conv_layer1 = nn.Conv1d(1, 30, 5, 1, bias=True, padding=2, padding_mode='reflect')
-        self.conv_layer2 = nn.Conv1d(30, 20, 5, 1, bias=True, padding=2, padding_mode='reflect')
-        self.conv_layer3 = nn.Conv1d(20, 10, 3, 1, bias=True, padding=1, padding_mode='reflect')
-        self.conv_layer4 = nn.Conv1d(10, 3, 3, 1, bias=True, padding=1, padding_mode='reflect')
-        self.fc_mu = nn.Linear(63, 21)
-        self.fc_logvar = nn.Linear(63, 21)
-
-        self.ln1 = nn.LayerNorm(168)
-        self.ln2 = nn.LayerNorm(84)
-        self.ln3 = nn.LayerNorm(42)
-
-    def forward(self, x):
-        # x: [batch, 168]
-        x = self.ln1(x)
-        x = x.unsqueeze(1)                  # [batch, 1, 168]
-        x = torch.relu(self.conv_layer1(x)) # [batch, 30, 168]
-        x = torch.relu(self.conv_layer2(x)) # [batch, 20, 168]
-        x = self.pool(x)                    # [batch, 20, 84]
-        x = self.ln2(x)
-        x = torch.relu(self.conv_layer3(x)) # [batch, 10, 84]
-        x = self.pool(x)                    # [batch, 10, 42]
-        x = self.ln3(x)
-        x = torch.relu(self.conv_layer4(x)) # [batch, 3, 42]
-        x = self.pool(x)                    # [batch, 3, 21]
-        x = x.view(x.shape[0], -1)          # [batch, 63]
-        mu = self.fc_mu(x)                  # [batch, 21]
-        logvar = self.fc_logvar(x)          # [batch, 21]
-        return mu, logvar
-
-class VAE_Decoder(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.dense = nn.Linear(21, 63)
-        
-        self.deconv_layer1 = nn.ConvTranspose1d(3, 10, 3, 1, padding=1)
-        self.deconv_layer2 = nn.ConvTranspose1d(10, 20, 3, 1, padding=1)
-        self.deconv_layer3 = nn.ConvTranspose1d(20, 30, 5, 1, padding=2)
-        self.final_conv = nn.Conv1d(30, 1, 5, 1, padding=2, padding_mode='reflect')
-
-        self.upsample = nn.Upsample(scale_factor=2, mode='linear', align_corners=True)
-
-        self.ln1 = nn.LayerNorm(42)
-        self.ln2 = nn.LayerNorm(84)
-        self.ln3 = nn.LayerNorm(168)
-
-    def forward(self, z):
-        # z: [batch, 21]
-        x = self.dense(z)                   # [batch, 63]
-        x = x.view(x.shape[0], 3, 21)       # [batch, 3, 21]
-        
-        x = self.upsample(x)                # [batch, 3, 42]
-        x = torch.relu(self.deconv_layer1(x)) # [batch, 10, 42]
-        x = self.ln1(x)
-        
-        x = self.upsample(x)                # [batch, 10, 84]
-        x = torch.relu(self.deconv_layer2(x)) # [batch, 20, 84]
-        x = self.ln2(x)
-
-        x = self.upsample(x)                # [batch, 20, 168]
-        x = torch.relu(self.deconv_layer3(x)) # [batch, 30, 168]
-        
-        x = self.final_conv(x)              # [batch, 1, 168]
-        x = x.squeeze(1)                    # [batch, 168]
-        x = self.ln3(x)
-        
-        return x
-
-class VAE(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.encoder = VAE_Encoder()
-        self.decoder = VAE_Decoder()
-
-    @staticmethod
-    def reparameterize(mu, logvar):
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-
-    def forward(self, x):
-        mu, logvar = self.encoder(x)
-        z = self.reparameterize(mu, logvar)
-        recon_x = self.decoder(z)
-        return recon_x, mu, logvar

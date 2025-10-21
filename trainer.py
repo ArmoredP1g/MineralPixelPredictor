@@ -3,7 +3,6 @@ from torch.cuda.amp import autocast as autocast
 import torch
 import os
 import numpy as np
-from models.models import VAE
 import spectral
 from spectral import imshow
 import ast
@@ -47,7 +46,7 @@ class learning_rate_adjuster():
                     param_group['lr'] = self.cur_lr
                 print("lr update to：{}".format(self.cur_lr))
             
-def train_AE(train_loader, model, fold, lr=0.001, tag="unamed", lr_decay_step=5000, step=0, VAE=False):
+def train_AE(train_loader, model, fold, lr=0.001, tag="unamed", lr_decay_step=5000, step=0):
     sum_writer = SummaryWriter("./runs/{}".format(tag))
     optimizer = AdamW(model.parameters(),
                     lr=lr,
@@ -68,14 +67,9 @@ def train_AE(train_loader, model, fold, lr=0.001, tag="unamed", lr_decay_step=50
         total_step+=1
 
         optimizer.zero_grad() 
-        if not VAE:
-            output = model(data.to(device).squeeze(0))
-            loss = mse_loss(data.to(device).squeeze(0), output)
-        else:
-            output, mu, logvar = model(data.to(device).squeeze(0))
-            MSE_loss = mse_loss(output, data.to(device).squeeze(0))
-            KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-            loss = MSE_loss + KLD*1e-7
+        output = model(data.to(device).squeeze(0))
+        loss = mse_loss(data.to(device).squeeze(0), output)
+
         loss.backward()
         optimizer.step()
         loss_sum += loss
@@ -91,21 +85,17 @@ def train_AE(train_loader, model, fold, lr=0.001, tag="unamed", lr_decay_step=50
 
             loss_sum = 0
 
-    if not VAE:
-        torch.save(model.state_dict(), ckpt_path+"/"+session_tag+"/encoder_fold{}_step{}.pt".format(fold, total_step))
-        return model.encoder
-    else:
-        torch.save(model, ckpt_path+"/"+session_tag+"/VAE_fold{}_step{}.pt".format(fold, total_step))
-        return model.encoder, model
+    torch.save(model.state_dict(), ckpt_path+"/"+session_tag+"/encoder_fold{}_step{}.pt".format(fold, total_step))
+    return model[0]
 
-def train_predictor(train_loader, encoder, predictor, fold, lr=0.001, tag="unamed", pretrain_step=0, lr_decay=0, lr_decay_step=5000, lr_lower_bound=5e-7, step=0, test_data=None, vis=None, freeze=True):
+
+def train_predictor(train_loader, encoder, predictor, fold, lr=0.001, tag="unamed", pretrain_step=0, lr_decay=0, lr_decay_step=5000, lr_lower_bound=5e-7, step=0, test_data=None, vis=None):
     print("Training predictor for fold {}".format(fold))
     # Freeze encoder parameters
-    if freeze:
-        for param in encoder.parameters():
-            param.requires_grad = False
+    for param in encoder.parameters():
+        param.requires_grad = False
 
-    # Combine encoder and predictor into a single model
+# Combine encoder and predictor into a single model
     model = torch.nn.Sequential(encoder, predictor)
     optimizer = AdamW(model.parameters(),
                     lr=lr,
@@ -203,7 +193,6 @@ def train_predictor(train_loader, encoder, predictor, fold, lr=0.001, tag="uname
                     if cur != len:
                         pixelwise_prediction.append(model(data[cur:len]).to("cpu"))
 
-
                     pixelwise_prediction = torch.cat(pixelwise_prediction, dim=0)
                 prediction = pixelwise_prediction.mean()*100
                 err += torch.abs(gt - prediction)
@@ -289,4 +278,3 @@ def train_predictor(train_loader, encoder, predictor, fold, lr=0.001, tag="uname
             model.train()
 
         lr_adjuster.step(total_step, optimizer)
-

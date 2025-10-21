@@ -18,7 +18,6 @@ import torch
 import torch.nn as nn
 import os
 
-# torch.autograd.set_detect_anomaly(True)
 pool = torch.nn.AvgPool2d(3,3)
 mask_rgb_values = [[255,242,0],[34,177,76],[255,0,88]]
 def test_data(list):
@@ -72,25 +71,6 @@ if __name__ == "__main__":
                 '11_B','59_C','10_B','8_C','41_A','38_B',
                 '57_C','61_B','37_C']
 
-    data = []
-    for id in all_samples:
-        imgid, sampleid = id.split('_')
-        sampleid = ord(sampleid) - 65
-        metadata = spectral.envi.open(dataset_path+"/spectral_data/{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr".format(imgid)).metadata
-        gt = ast.literal_eval(metadata['gt_TFe'])
-        data.append({
-            "id": id,
-            "gt": torch.Tensor([gt[sampleid]]).to(device)
-        })
-
-    # 排序数据集
-    data = sorted(data, key=lambda x: x["gt"])
-    
-    # split data into 5 folds, make each fold has the same distribution
-    folds = [[],[],[],[],[]]
-    for i in range(len(data)):
-        folds[i%5].append(data[i]["id"])
-
     # all_samples = ['13_A','11_A','12_A','12_C','25_A','42_B','55_C','15_A',
     #                 '56_B','4_B','42_A','57_A','14_B','36_B','43_C','26_A',
     #                 '9_C','43_A','53_A','3_B','30_C','27_A','22_B','27_C','31_C',
@@ -116,7 +96,24 @@ if __name__ == "__main__":
     #                 '57_C','50_C','61_B','37_C']
 
 
+    data = []
+    for id in all_samples:
+        imgid, sampleid = id.split('_')
+        sampleid = ord(sampleid) - 65
+        metadata = spectral.envi.open(dataset_path+"/spectral_data/{}-Radiance From Raw Data-Reflectance from Radiance Data and Measured Reference Spectrum.bip.hdr".format(imgid)).metadata
+        gt = ast.literal_eval(metadata['gt_TFe'])
+        data.append({
+            "id": id,
+            "gt": torch.Tensor([gt[sampleid]]).to(device)
+        })
 
+    # 排序数据集
+    data = sorted(data, key=lambda x: x["gt"])
+    
+    # split data into 5 folds, make each fold has the same distribution
+    folds = [[],[],[],[],[]]
+    for i in range(len(data)):
+        folds[i%5].append(data[i]["id"])
 
     # training session
     ckpt_path = ckpt_path+"/"+session_tag
