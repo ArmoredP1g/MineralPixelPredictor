@@ -1,15 +1,48 @@
-device = "cuda"
-dataset_path = "D:\\IR_DATA"
-ckpt_path = "ckpt"
-ae_step_per_fold = 40000
-pd_step_per_fold = 150000
-batch_size = 12
-learning_rate = 1e-3
-lr_decay=0.98
-lr_decay_step=1000
-lr_lower_bound=1e-8
-num_workers=6
-session_tag = "final"
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class RuntimeConfig:
+    device: str = "cuda"
+    dataset_path: str = "D:\\IR_DATA"
+    ckpt_path: str = "ckpt"
+    num_workers: int = 6
+    session_tag: str = "final"
+
+
+@dataclass(frozen=True)
+class TrainingConfig:
+    ae_step_per_fold: int = 40000
+    pd_step_per_fold: int = 150000
+    batch_size: int = 12
+    learning_rate: float = 1e-3
+    lr_decay: float = 0.98
+    lr_decay_step: int = 1000
+    lr_lower_bound: float = 1e-8
+
+
+@dataclass(frozen=True)
+class ProjectConfig:
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
+
+
+DEFAULT_CONFIG = ProjectConfig()
+
+
+device = DEFAULT_CONFIG.runtime.device
+dataset_path = DEFAULT_CONFIG.runtime.dataset_path
+ckpt_path = DEFAULT_CONFIG.runtime.ckpt_path
+num_workers = DEFAULT_CONFIG.runtime.num_workers
+session_tag = DEFAULT_CONFIG.runtime.session_tag
+
+ae_step_per_fold = DEFAULT_CONFIG.training.ae_step_per_fold
+pd_step_per_fold = DEFAULT_CONFIG.training.pd_step_per_fold
+batch_size = DEFAULT_CONFIG.training.batch_size
+learning_rate = DEFAULT_CONFIG.training.learning_rate
+lr_decay = DEFAULT_CONFIG.training.lr_decay
+lr_decay_step = DEFAULT_CONFIG.training.lr_decay_step
+lr_lower_bound = DEFAULT_CONFIG.training.lr_lower_bound
 
 
 

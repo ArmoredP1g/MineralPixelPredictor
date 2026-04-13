@@ -10,17 +10,8 @@ from sklearn.decomposition import KernelPCA, PCA
 from sklearn.manifold import Isomap
 
 from models.sigmoid_plsr import SigmoidTargetTransform
-
-from baseline_exp import (
-    ALL_SAMPLES,
-    DatasetBundle,
-    adjust_sg_params,
-    append_first_order_diffs,
-    build_dataset,
-    compute_metrics,
-    instantiate_model,
-    EPS,
-)
+from classical_baseline_core import DatasetBundle, EPS, adjust_sg_params, append_first_order_diffs, build_dataset, compute_metrics, instantiate_model
+from experiment_utils import ALL_SAMPLES
 
 
 @lru_cache(maxsize=1)

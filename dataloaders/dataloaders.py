@@ -3,7 +3,6 @@ import torch
 import h5py
 import spectral
 from torch.utils.data.dataset import Dataset
-from configs.training_cfg import device
 import random
 import itertools
 from typing import List, Union
@@ -13,7 +12,8 @@ class dataset_iron_balanced_mixed(Dataset):
         按照样本标签值出现的频率做概率加权随机采样，缓解样本不平衡的问题
     '''
     def __init__(self, path_csv: str, path_hdf5: str, samples: int = 100000,
-                 sample_list: Union[bool, List[str]] = False, samplepoint: int = 500, balance: bool = True):
+                 sample_list: Union[bool, List[str]] = False, samplepoint: int = 500,
+                 balance: bool = True, return_sample_index: bool = False):
         '''
         args:
             path_csv: ...
@@ -31,7 +31,7 @@ class dataset_iron_balanced_mixed(Dataset):
         else:
             # 去重并保持为列表
             assert isinstance(sample_list, list), "sample_list must be list when not False"
-            self.sample_list = list(set(sample_list))
+            self.sample_list = list(dict.fromkeys(sample_list))
 
         # 获取sample_list的标签值
         self.label_list = []
@@ -58,23 +58,30 @@ class dataset_iron_balanced_mixed(Dataset):
             self.freq = (1 / self.freq**balance)
 
         self.samplepoint = samplepoint
+        self.return_sample_index = return_sample_index
         self.training_list = torch.multinomial(self.freq, self.len, replacement=True)
+
     def __getitem__(self, index):
         if self.hdf5 is None:
             self.hdf5 = h5py.File(self.path_hdf5, 'r')
 
         # id_list = torch.multinomial(self.freq, 1)
-        gt = self.label_list[self.training_list[index]]/100
+        sample_idx = int(self.training_list[index].item())
+        gt = self.label_list[sample_idx]/100
 
         result = []
 
-        dataid_from = self.df[self.df['sample_id']==self.sample_list[self.training_list[index]]].dataid_from.to_list()[0]
-        dataid_to = self.df[self.df['sample_id']==self.sample_list[self.training_list[index]]].dataid_to.to_list()[0]
+        dataid_from = self.df[self.df['sample_id']==self.sample_list[sample_idx]].dataid_from.to_list()[0]
+        dataid_to = self.df[self.df['sample_id']==self.sample_list[sample_idx]].dataid_to.to_list()[0]
         id_list = random.sample(range(dataid_from,dataid_to),self.samplepoint)
 
         for id in id_list:
             result.append(torch.Tensor(self.hdf5[str(id)]).unsqueeze(0))
-        return torch.cat(result,dim=0), gt
+
+        spectra = torch.cat(result,dim=0)
+        if self.return_sample_index:
+            return spectra, gt, sample_idx
+        return spectra, gt
 
     def __len__(self):
         return self.len

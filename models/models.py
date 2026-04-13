@@ -5,7 +5,6 @@ from scipy.signal import savgol_filter
 import numpy as np
 # from models.ProbSparse_Self_Attention import ProbSparse_Self_Attention_Block, Self_Attention_Decoder
 # from models.PositionEmbedding import positionalencoding1d
-from configs.training_cfg import *
 import seaborn as sns
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
